@@ -293,6 +293,9 @@ int main(int argc, char*argv[])
     // Load Textures
     GLuint brickTextureID = loadTexture("Textures/brick.jpg");
     GLuint cementTextureID = loadTexture("Textures/cement.jpg");
+
+    std::cout << "brickTextureID = " << brickTextureID << std::endl;
+    std::cout << "cementTextureID = " << cementTextureID << std::endl;
     
     // Black background
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -406,12 +409,13 @@ int main(int argc, char*argv[])
         
         // Draw textured geometry
         glUseProgram(texturedShaderProgram);
-
+        glUniform1i(glGetUniformLocation(texturedShaderProgram, "textureSampler"), 0);
         glActiveTexture(GL_TEXTURE0);
         GLuint textureLocation = glGetUniformLocation(texturedShaderProgram, "textureSampler");
         glBindTexture(GL_TEXTURE_2D, brickTextureID);
         glUniform1i(textureLocation, 0);                // Set our Texture sampler to user Texture Unit 0
         
+        glBindVertexArray(texturedCubeVAO);
         // Draw ground
         mat4 groundWorldMatrix = translate(mat4(1.0f), vec3(0.0f, -0.01f, 0.0f)) * scale(mat4(1.0f), vec3(1000.0f, 0.02f, 1000.0f));
         setWorldMatrix(texturedShaderProgram, groundWorldMatrix);
