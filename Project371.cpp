@@ -7,6 +7,9 @@
 #include <iostream>
 #include <list>
 #include <algorithm>
+#include <vector>
+#include <string>
+
 
 #define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
 #include <GL/glew.h>    // Include GLEW - OpenGL Extension Wrangler
@@ -52,6 +55,51 @@ private:
     vec3 mVelocity;
 };
 
+float skyboxVertices[] = {
+    -1.0f,  1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+    -1.0f,  1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f
+};
+
+
 GLuint loadTexture(const char *filename);
 
 const char* getVertexShaderSource();
@@ -61,6 +109,62 @@ const char* getFragmentShaderSource();
 const char* getTexturedVertexShaderSource();
 
 const char* getTexturedFragmentShaderSource();
+
+const char* getSkyboxVertexShader() {
+    return R"(
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        out vec3 TexCoords;
+        uniform mat4 projectionMatrix;
+        uniform mat4 viewMatrix;
+        void main() {
+            TexCoords = aPos;
+            vec4 pos = projectionMatrix * viewMatrix * vec4(aPos, 1.0);
+            gl_Position = pos.xyww;
+        }
+    )";
+}
+
+const char* getSkyboxFragmentShader() {
+    return R"(
+        #version 330 core
+        in vec3 TexCoords;
+        out vec4 FragColor;
+        uniform samplerCube skybox;
+        void main() {
+            FragColor = texture(skybox, TexCoords);
+        }
+    )";
+}
+
+// === Cubemap Loader ===
+GLuint loadCubemap(const std::vector<std::string>& faces) {
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data) {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB,
+                         width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+        } else {
+            std::cerr << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
+}
+
 
 int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource);
 
@@ -247,6 +351,26 @@ int main(int argc, char*argv[])
     list<Projectile> projectileList;
 
     glBindVertexArray(texturedCubeVAO);
+    
+    std::vector<std::string> faces = {
+        "Textures/Skybox/right.jpg",
+        "Textures/Skybox/left.jpg",
+        "Textures/Skybox/top.jpg",
+        "Textures/Skybox/bottom.jpg",
+        "Textures/Skybox/front.jpg",
+        "Textures/Skybox/back.jpg"
+    };
+    GLuint skyboxTex = loadCubemap(faces);
+    GLuint skyboxVAO, skyboxVBO;
+    int skyboxShaderProgram = compileAndLinkShaders(getSkyboxVertexShader(), getSkyboxFragmentShader());
+
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
     // Entering Main Loop
     while(!glfwWindowShouldClose(window))
@@ -257,6 +381,18 @@ int main(int argc, char*argv[])
 
         // Each frame, reset color of each pixel to glClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glDepthFunc(GL_LEQUAL);
+        glUseProgram(skyboxShaderProgram);
+        mat4 viewSky = mat4(mat3(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(skyboxShaderProgram, "viewMatrix"), 1, GL_FALSE, &viewSky[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(skyboxShaderProgram, "projectionMatrix"), 1, GL_FALSE, &projectionMatrix[0][0]);
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+        glUniform1i(glGetUniformLocation(skyboxShaderProgram, "skybox"), 0);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glDepthFunc(GL_LESS);
         
         // Draw textured geometry
         glUseProgram(texturedShaderProgram);
