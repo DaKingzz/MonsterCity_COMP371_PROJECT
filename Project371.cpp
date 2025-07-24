@@ -7,6 +7,9 @@
 #include <iostream>
 #include <list>
 #include <algorithm>
+#include <vector>
+#include <string>
+
 
 #define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
 #include <GL/glew.h>    // Include GLEW - OpenGL Extension Wrangler
@@ -52,6 +55,51 @@ private:
     vec3 mVelocity;
 };
 
+float skyboxVertices[] = {
+    -1.0f,  1.0f, -1.0f,
+    -1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f, -1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+
+    -1.0f, -1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f,
+    -1.0f, -1.0f,  1.0f,
+
+    -1.0f,  1.0f, -1.0f,
+     1.0f,  1.0f, -1.0f,
+     1.0f,  1.0f,  1.0f,
+     1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f,  1.0f,
+    -1.0f,  1.0f, -1.0f,
+
+    -1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f, -1.0f,
+     1.0f, -1.0f, -1.0f,
+    -1.0f, -1.0f,  1.0f,
+     1.0f, -1.0f,  1.0f
+};
+
+
 GLuint loadTexture(const char *filename);
 
 const char* getVertexShaderSource();
@@ -61,6 +109,62 @@ const char* getFragmentShaderSource();
 const char* getTexturedVertexShaderSource();
 
 const char* getTexturedFragmentShaderSource();
+
+const char* getSkyboxVertexShader() {
+    return R"(
+        #version 330 core
+        layout (location = 0) in vec3 aPos;
+        out vec3 TexCoords;
+        uniform mat4 projectionMatrix;
+        uniform mat4 viewMatrix;
+        void main() {
+            TexCoords = aPos;
+            vec4 pos = projectionMatrix * viewMatrix * vec4(aPos, 1.0);
+            gl_Position = pos.xyww;
+        }
+    )";
+}
+
+const char* getSkyboxFragmentShader() {
+    return R"(
+        #version 330 core
+        in vec3 TexCoords;
+        out vec4 FragColor;
+        uniform samplerCube skybox;
+        void main() {
+            FragColor = texture(skybox, TexCoords);
+        }
+    )";
+}
+
+// === Cubemap Loader ===
+GLuint loadCubemap(const std::vector<std::string>& faces) {
+    GLuint textureID;
+    glGenTextures(1, &textureID);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, textureID);
+
+    int width, height, nrChannels;
+    for (unsigned int i = 0; i < faces.size(); i++) {
+        unsigned char* data = stbi_load(faces[i].c_str(), &width, &height, &nrChannels, 0);
+        if (data) {
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB,
+                         width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+        } else {
+            std::cerr << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+    return textureID;
+}
+
 
 int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource);
 
@@ -173,7 +277,7 @@ int main(int argc, char*argv[])
         glfwTerminate();
         return -1;
     }
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwMakeContextCurrent(window);
 
     
@@ -187,8 +291,11 @@ int main(int argc, char*argv[])
 
     
     // Load Textures
-    GLuint brickTextureID = loadTexture("Textures/brick.jpg");
-    GLuint cementTextureID = loadTexture("Textures/cement.jpg");
+    GLuint groundTextureID = loadTexture("Textures/road.jpg");
+    GLuint buildingTextureID = loadTexture("Textures/building.jpg");
+
+    std::cout << "groundTextureID = " << groundTextureID << std::endl;
+    std::cout << "buildingTextureID = " << buildingTextureID << std::endl;
     
     // Black background
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -215,7 +322,7 @@ int main(int argc, char*argv[])
     // Set projection matrix for shader, this won't change
     mat4 projectionMatrix = glm::perspective(70.0f,            // field of view in degrees
                                              800.0f / 600.0f,  // aspect ratio
-                                             0.01f, 100.0f);   // near and far (near > 0)
+                                             0.3f, 100.0f);   // near and far (near > 0)
     
     // Set initial view matrix
     mat4 viewMatrix = lookAt(cameraPosition,  // eye
@@ -247,6 +354,36 @@ int main(int argc, char*argv[])
     list<Projectile> projectileList;
 
     glBindVertexArray(texturedCubeVAO);
+    
+    std::vector<std::string> faces = {
+        "Textures/Skybox/right.jpg",
+        "Textures/Skybox/left.jpg",
+        "Textures/Skybox/top.jpg",
+        "Textures/Skybox/bottom.jpg",
+        "Textures/Skybox/front.jpg",
+        "Textures/Skybox/back.jpg"
+    };
+
+    std::vector<std::vector<float>> buildingHeights(20, std::vector<float>(20));
+    for (int i = 0; i < 20; ++i)
+    {
+        for (int j = 0; j < 20; ++j)
+        {
+            buildingHeights[i][j] = 20.0f + rand() % 20;
+        }
+    }
+
+    GLuint skyboxTex = loadCubemap(faces);
+    GLuint skyboxVAO, skyboxVBO;
+    int skyboxShaderProgram = compileAndLinkShaders(getSkyboxVertexShader(), getSkyboxFragmentShader());
+
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
     // Entering Main Loop
     while(!glfwWindowShouldClose(window))
@@ -257,15 +394,28 @@ int main(int argc, char*argv[])
 
         // Each frame, reset color of each pixel to glClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glDepthFunc(GL_LEQUAL);
+        glUseProgram(skyboxShaderProgram);
+        mat4 viewSky = mat4(mat3(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(skyboxShaderProgram, "viewMatrix"), 1, GL_FALSE, &viewSky[0][0]);
+        glUniformMatrix4fv(glGetUniformLocation(skyboxShaderProgram, "projectionMatrix"), 1, GL_FALSE, &projectionMatrix[0][0]);
+        glBindVertexArray(skyboxVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, skyboxTex);
+        glUniform1i(glGetUniformLocation(skyboxShaderProgram, "skybox"), 0);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+        glDepthFunc(GL_LESS);
         
         // Draw textured geometry
         glUseProgram(texturedShaderProgram);
-
+        glUniform1i(glGetUniformLocation(texturedShaderProgram, "textureSampler"), 0);
         glActiveTexture(GL_TEXTURE0);
         GLuint textureLocation = glGetUniformLocation(texturedShaderProgram, "textureSampler");
-        glBindTexture(GL_TEXTURE_2D, brickTextureID);
+        glBindTexture(GL_TEXTURE_2D, groundTextureID);
         glUniform1i(textureLocation, 0);                // Set our Texture sampler to user Texture Unit 0
         
+        glBindVertexArray(texturedCubeVAO);
         // Draw ground
         mat4 groundWorldMatrix = translate(mat4(1.0f), vec3(0.0f, -0.01f, 0.0f)) * scale(mat4(1.0f), vec3(1000.0f, 0.02f, 1000.0f));
         setWorldMatrix(texturedShaderProgram, groundWorldMatrix);
@@ -273,31 +423,29 @@ int main(int argc, char*argv[])
         glDrawArrays(GL_TRIANGLES, 0, 36); // 36 vertices, starting at index 0
         
         // Draw pillars
-        glBindTexture(GL_TEXTURE_2D, cementTextureID);
+        glBindTexture(GL_TEXTURE_2D, buildingTextureID);
         mat4 pillarWorldMatrix = translate(mat4(1.0f), vec3(0.0f, 10.0f, 0.0f)) * scale(mat4(1.0f), vec3(2.0f, 20.0f, 2.0f));
         setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
         
         glDrawArrays(GL_TRIANGLES, 0, 36);
+        float spacing = 40.0f;
         
-        for (int i=0; i<20; ++i)
+        for (int i = 0; i < 20; ++i)
         {
-            for (int j=0; j<20; ++j)
+            for (int j = 0; j < 20; ++j)
             {
-                // FIXME: it would be more efficient to set the cement texture and draw all pillars, then switch to brick texture and draw all pillar bases
-                // use cement texture for pillar
-                glBindTexture(GL_TEXTURE_2D, cementTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 5.0f, -100.0f + j * 10.0f)) * scale(mat4(1.0f), vec3(1.0f, 10.0f, 1.0f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
+                float height = buildingHeights[i][j];
+        
+                // Cement-textured building
+                glBindTexture(GL_TEXTURE_2D, buildingTextureID);
+                vec3 buildingPos = vec3(-100.0f + i * spacing, height / 2.0f, -100.0f + j * spacing);
+                mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(6.0f, height, 6.0f));
+                setWorldMatrix(texturedShaderProgram, buildingMatrix);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
-                
-                // use brick texture for base
-                glBindTexture(GL_TEXTURE_2D, brickTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 0.55f, -100.0f + j * 10.0f)) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(1.1f, 1.1f, 1.1f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
+    
             }
         }
-        
+
         // Draw colored geometry
         glUseProgram(colorShaderProgram);
 
