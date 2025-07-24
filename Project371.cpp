@@ -291,11 +291,11 @@ int main(int argc, char*argv[])
 
     
     // Load Textures
-    GLuint brickTextureID = loadTexture("Textures/brick.jpg");
-    GLuint cementTextureID = loadTexture("Textures/cement.jpg");
+    GLuint groundTextureID = loadTexture("Textures/road.jpg");
+    GLuint buildingTextureID = loadTexture("Textures/building.jpg");
 
-    std::cout << "brickTextureID = " << brickTextureID << std::endl;
-    std::cout << "cementTextureID = " << cementTextureID << std::endl;
+    std::cout << "groundTextureID = " << groundTextureID << std::endl;
+    std::cout << "buildingTextureID = " << buildingTextureID << std::endl;
     
     // Black background
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -412,7 +412,7 @@ int main(int argc, char*argv[])
         glUniform1i(glGetUniformLocation(texturedShaderProgram, "textureSampler"), 0);
         glActiveTexture(GL_TEXTURE0);
         GLuint textureLocation = glGetUniformLocation(texturedShaderProgram, "textureSampler");
-        glBindTexture(GL_TEXTURE_2D, brickTextureID);
+        glBindTexture(GL_TEXTURE_2D, groundTextureID);
         glUniform1i(textureLocation, 0);                // Set our Texture sampler to user Texture Unit 0
         
         glBindVertexArray(texturedCubeVAO);
@@ -423,7 +423,7 @@ int main(int argc, char*argv[])
         glDrawArrays(GL_TRIANGLES, 0, 36); // 36 vertices, starting at index 0
         
         // Draw pillars
-        glBindTexture(GL_TEXTURE_2D, cementTextureID);
+        glBindTexture(GL_TEXTURE_2D, buildingTextureID);
         mat4 pillarWorldMatrix = translate(mat4(1.0f), vec3(0.0f, 10.0f, 0.0f)) * scale(mat4(1.0f), vec3(2.0f, 20.0f, 2.0f));
         setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
         
@@ -437,7 +437,7 @@ int main(int argc, char*argv[])
                 float height = buildingHeights[i][j];
         
                 // Cement-textured building
-                glBindTexture(GL_TEXTURE_2D, cementTextureID);
+                glBindTexture(GL_TEXTURE_2D, buildingTextureID);
                 vec3 buildingPos = vec3(-100.0f + i * spacing, height / 2.0f, -100.0f + j * spacing);
                 mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(6.0f, height, 6.0f));
                 setWorldMatrix(texturedShaderProgram, buildingMatrix);
