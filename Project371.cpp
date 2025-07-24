@@ -277,7 +277,7 @@ int main(int argc, char*argv[])
         glfwTerminate();
         return -1;
     }
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwMakeContextCurrent(window);
 
     
@@ -319,7 +319,7 @@ int main(int argc, char*argv[])
     // Set projection matrix for shader, this won't change
     mat4 projectionMatrix = glm::perspective(70.0f,            // field of view in degrees
                                              800.0f / 600.0f,  // aspect ratio
-                                             0.01f, 100.0f);   // near and far (near > 0)
+                                             0.3f, 100.0f);   // near and far (near > 0)
     
     // Set initial view matrix
     mat4 viewMatrix = lookAt(cameraPosition,  // eye
@@ -360,6 +360,16 @@ int main(int argc, char*argv[])
         "Textures/Skybox/front.jpg",
         "Textures/Skybox/back.jpg"
     };
+
+    std::vector<std::vector<float>> buildingHeights(20, std::vector<float>(20));
+    for (int i = 0; i < 20; ++i)
+    {
+        for (int j = 0; j < 20; ++j)
+        {
+            buildingHeights[i][j] = 20.0f + rand() % 20;
+        }
+    }
+
     GLuint skyboxTex = loadCubemap(faces);
     GLuint skyboxVAO, skyboxVBO;
     int skyboxShaderProgram = compileAndLinkShaders(getSkyboxVertexShader(), getSkyboxFragmentShader());
@@ -414,26 +424,24 @@ int main(int argc, char*argv[])
         setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
         
         glDrawArrays(GL_TRIANGLES, 0, 36);
+        float spacing = 40.0f;
         
-        for (int i=0; i<20; ++i)
+        for (int i = 0; i < 20; ++i)
         {
-            for (int j=0; j<20; ++j)
+            for (int j = 0; j < 20; ++j)
             {
-                // FIXME: it would be more efficient to set the cement texture and draw all pillars, then switch to brick texture and draw all pillar bases
-                // use cement texture for pillar
+                float height = buildingHeights[i][j];
+        
+                // Cement-textured building
                 glBindTexture(GL_TEXTURE_2D, cementTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 5.0f, -100.0f + j * 10.0f)) * scale(mat4(1.0f), vec3(1.0f, 10.0f, 1.0f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
+                vec3 buildingPos = vec3(-100.0f + i * spacing, height / 2.0f, -100.0f + j * spacing);
+                mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(6.0f, height, 6.0f));
+                setWorldMatrix(texturedShaderProgram, buildingMatrix);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
-                
-                // use brick texture for base
-                glBindTexture(GL_TEXTURE_2D, brickTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 0.55f, -100.0f + j * 10.0f)) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(1.1f, 1.1f, 1.1f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
+    
             }
         }
-        
+
         // Draw colored geometry
         glUseProgram(colorShaderProgram);
 
