@@ -355,15 +355,17 @@ int main(int argc, char*argv[])
     // Black background
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-    std::string vertexSource = readShaderFile("shaders/light_vertex.glsl");
-    std::string fragmentSource = readShaderFile("shaders/light_fragment.glsl");
+    std::string vertexSource = readShaderFile("shaders/texture_vertex.glsl");
+    std::string fragmentSource = readShaderFile("shaders/texture_fragment.glsl");
 
+    std::string lightVertexSource = readShaderFile("shaders/light_vertex.glsl");
+    std::string lightFragmentSource = readShaderFile("shaders/light_fragment.glsl");
 
     
     // Compile and link shaders here ...
     int colorShaderProgram = compileAndLinkShaders(getVertexShaderSource(), getFragmentShaderSource());
     // int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
-    GLuint lightShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
+    GLuint lightShaderProgram = compileAndLinkShaders(lightVertexSource.c_str(), lightFragmentSource.c_str());
     GLuint texturedShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
 
     // Camera parameters for view transform
@@ -532,7 +534,7 @@ int main(int argc, char*argv[])
         glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
         float radius = 20.0f;
-        float height = 90.0f;  // constant Y
+        float height = 30.0f;  // constant Y
 
         glm::vec3 lightPosition = glm::vec3(
             cos(time) * radius,  // X moves in a circle
