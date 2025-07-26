@@ -358,12 +358,13 @@ int main(int argc, char*argv[])
     std::string vertexSource = readShaderFile("shaders/light_vertex.glsl");
     std::string fragmentSource = readShaderFile("shaders/light_fragment.glsl");
 
+
     
     // Compile and link shaders here ...
     int colorShaderProgram = compileAndLinkShaders(getVertexShaderSource(), getFragmentShaderSource());
-    int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
+    // int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
     GLuint lightShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
-
+    GLuint texturedShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
 
     // Camera parameters for view transform
     vec3 cameraPosition(0.6f,1.0f,10.0f);
@@ -460,6 +461,7 @@ int main(int argc, char*argv[])
     while(!glfwWindowShouldClose(window))
     {
         // Frame time calculation
+        float time = glfwGetTime(); 
         float dt = glfwGetTime() - lastFrameTime;
         lastFrameTime += dt;
 
@@ -529,15 +531,38 @@ int main(int argc, char*argv[])
         
         glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
-        glm::vec3 lightPosition = cameraPosition + cameraLookAt * 20.0f;
+        float radius = 20.0f;
+        float height = 90.0f;  // constant Y
+
+        glm::vec3 lightPosition = glm::vec3(
+            cos(time) * radius,  // X moves in a circle
+            height,              // Y fixed (above the scene)
+            sin(time) * radius   // Z moves in a circle
+        );
 
         glm::mat4 lightModel = glm::translate(glm::mat4(1.0f), lightPosition) *
-                            glm::scale(glm::mat4(2.0f), glm::vec3(2.0f));
+                       glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
 
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel));
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
 
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        glUseProgram(texturedShaderProgram);
+
+        // Get uniform locations
+        GLint lightPosLoc = glGetUniformLocation(texturedShaderProgram, "lightPos");
+        GLint viewPosLoc = glGetUniformLocation(texturedShaderProgram, "viewPos");
+
+        // Set uniform values
+        glUniform3fv(lightPosLoc, 1, glm::value_ptr(lightPosition));
+        glUniform3fv(viewPosLoc, 1, glm::value_ptr(cameraPosition));
+
+        // Set model/view/proj uniforms here too if not already done
+
+        // Draw scene objects affected by light
+        glBindVertexArray(texturedCubeVAO);  // Your ground or building or textured cube
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // Spinning cube at camera position
