@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <vector>
 #include <string>
+#include <fstream>    // for std::ifstream
+#include <sstream>    // for std::stringstream
 
 
 #define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
@@ -20,6 +22,7 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
@@ -167,6 +170,7 @@ GLuint loadCubemap(const std::vector<std::string>& faces) {
 
 
 int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource);
+std::string readShaderFile(const char* filePath);
 
 struct TexturedColoredVertex
 {
@@ -228,6 +232,57 @@ const TexturedColoredVertex texturedCubeVertexArray[] = {  // position,         
     TexturedColoredVertex(vec3(-0.5f, 0.5f,-0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0.0f, 0.0f)),
     TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0.0f, 1.0f))
 };
+
+float cubeVertices[] = {
+    // back face
+    -0.5f, -0.5f, -0.5f,  // bottom-left
+     0.5f, -0.5f, -0.5f,  // bottom-right
+     0.5f,  0.5f, -0.5f,  // top-right
+     0.5f,  0.5f, -0.5f,  // top-right
+    -0.5f,  0.5f, -0.5f,  // top-left
+    -0.5f, -0.5f, -0.5f,  // bottom-left
+
+    // front face
+    -0.5f, -0.5f,  0.5f,
+     0.5f, -0.5f,  0.5f,
+     0.5f,  0.5f,  0.5f,
+     0.5f,  0.5f,  0.5f,
+    -0.5f,  0.5f,  0.5f,
+    -0.5f, -0.5f,  0.5f,
+
+    // left face
+    -0.5f,  0.5f,  0.5f,
+    -0.5f,  0.5f, -0.5f,
+    -0.5f, -0.5f, -0.5f,
+    -0.5f, -0.5f, -0.5f,
+    -0.5f, -0.5f,  0.5f,
+    -0.5f,  0.5f,  0.5f,
+
+    // right face
+     0.5f,  0.5f,  0.5f,
+     0.5f,  0.5f, -0.5f,
+     0.5f, -0.5f, -0.5f,
+     0.5f, -0.5f, -0.5f,
+     0.5f, -0.5f,  0.5f,
+     0.5f,  0.5f,  0.5f,
+
+    // bottom face
+    -0.5f, -0.5f, -0.5f,
+     0.5f, -0.5f, -0.5f,
+     0.5f, -0.5f,  0.5f,
+     0.5f, -0.5f,  0.5f,
+    -0.5f, -0.5f,  0.5f,
+    -0.5f, -0.5f, -0.5f,
+
+    // top face
+    -0.5f,  0.5f, -0.5f,
+     0.5f,  0.5f, -0.5f,
+     0.5f,  0.5f,  0.5f,
+     0.5f,  0.5f,  0.5f,
+    -0.5f,  0.5f,  0.5f,
+    -0.5f,  0.5f, -0.5f
+};
+
 
 int createTexturedCubeVertexArrayObject();
 
@@ -299,11 +354,17 @@ int main(int argc, char*argv[])
     
     // Black background
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    std::string vertexSource = readShaderFile("shaders/light_vertex.glsl");
+    std::string fragmentSource = readShaderFile("shaders/light_fragment.glsl");
+
     
     // Compile and link shaders here ...
     int colorShaderProgram = compileAndLinkShaders(getVertexShaderSource(), getFragmentShaderSource());
     int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
-    
+    GLuint lightShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
+
+
     // Camera parameters for view transform
     vec3 cameraPosition(0.6f,1.0f,10.0f);
     vec3 cameraLookAt(0.0f, 0.0f, -1.0f);
@@ -338,6 +399,16 @@ int main(int argc, char*argv[])
 
     // Define and upload geometry to the GPU here ...
     int texturedCubeVAO = createTexturedCubeVertexArrayObject();
+
+    GLuint lightCubeVAO, lightCubeVBO;
+    glGenVertexArrays(1, &lightCubeVAO);
+    glGenBuffers(1, &lightCubeVBO);
+
+    glBindVertexArray(lightCubeVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lightCubeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW); // use your existing skyboxVertices or cube vertices
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
 
     // For frame time
     float lastFrameTime = glfwGetTime();
@@ -456,6 +527,19 @@ int main(int argc, char*argv[])
             it->Draw();
         }
         
+        glUseProgram(lightShaderProgram);
+        glBindVertexArray(lightCubeVAO);
+        glm::vec3 lightPosition = cameraPosition + cameraLookAt * 20.0f;
+
+        glm::mat4 lightModel = glm::translate(glm::mat4(1.0f), lightPosition) *
+                            glm::scale(glm::mat4(2.0f), glm::vec3(2.0f));
+
+        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel));
+        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
         // Spinning cube at camera position
         spinningCubeAngle += 180.0f * dt;
         
@@ -725,6 +809,17 @@ int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentSh
     glDeleteShader(fragmentShader);
     
     return shaderProgram;
+}
+
+std::string readShaderFile(const char* filePath) {
+    std::ifstream file(filePath);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open shader file: " << filePath << std::endl;
+        return "";
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
 
 GLuint loadTexture(const char *filename)
