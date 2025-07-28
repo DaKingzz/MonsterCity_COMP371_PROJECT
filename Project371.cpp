@@ -30,6 +30,27 @@
 using namespace glm;
 using namespace std;
 
+quat rotationBetweenVectors(vec3 start , vec3 dest){
+    start = normalize(start);
+    dest = normalize(dest);
+
+    float cosTheta = dot(start , dest);
+    vec3 rotationAxis ;
+    
+    if(cosTheta < -0.999f){
+        rotationAxis = cross(vec3(0.0f , 0.0f, 1.0f),start);
+        if(length(rotationAxis) < 0.01f)
+        rotationAxis = cross(vec3(1.0f, 0.0f, 0.0f),start);
+        return angleAxis ( glm::radians(180.0f), normalize(rotationAxis));
+    }
+
+    rotationAxis = cross(start,dest);
+    float s = sqrt((1 + cosTheta) *2);
+    float invs = 1.0f /s;
+
+    return quat( s * 0.5f, rotationAxis.x * invs,rotationAxis.y * invs, rotationAxis.x * invs);
+}
+
 class Projectile
 {
 public:
@@ -46,10 +67,23 @@ public:
     void Draw() {
         // this is a bit of a shortcut, since we have a single vbo, it is already bound
         // let's just set the world matrix in the vertex shader
-        
-        mat4 worldMatrix = translate(mat4(1.0f), mPosition) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(0.2f, 0.2f, 0.2f));
-        glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+         vec3 dir =normalize(mVelocity);
+      //   mat4 scaleMatrix = scale(mat4(1.0f),vec3(0.75f, 0.05f, 0.1f));
+         vec3 up = vec3(0.0f, 1.0f, 0.0f);
+           if (abs(dot(dir, up)) > 0.99f) {
+        up = vec3(0.0f, 0.0f, 1.0f); // Use Z up if looking straight up/down
+    }
+
+
+    vec3 right = normalize(cross(up, dir));             
+    vec3 newUp = cross(dir, right);                    
+    mat4 rotationMatrix = mat4(vec4(right, 0.0f),vec4(newUp, 0.0f), vec4(dir, 0.0f),vec4(0.0f, 0.0f, 0.0f, 1.0f));
+
+    mat4 scaleMatrix = scale(mat4(1.0f), vec3(0.025f, 0.025f, 3.0f)); 
+    mat4 worldMatrix = translate(mat4(1.0f), mPosition) * rotationMatrix * scaleMatrix;
+
+    glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
     }
     
 private:
@@ -551,6 +585,7 @@ int main(int argc, char*argv[])
             it->Draw();
         }
         
+
         glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
         // === Animate light positions ===
@@ -734,7 +769,13 @@ int main(int argc, char*argv[])
         if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             const float projectileSpeed = 25.0f;
-            projectileList.push_back(Projectile(cameraPosition, projectileSpeed * cameraLookAt, colorShaderProgram));
+            vec3 direction = normalize(cameraLookAt);
+            vec3 velocity = direction * projectileSpeed;
+            vec3 spawnPosition = cameraPosition + direction * 2.0f;
+            
+           
+            // projectileList.push_back(Projectile(cameraPosition, projectileSpeed * cameraLookAt, colorShaderProgram));
+            projectileList.push_back(Projectile(spawnPosition,velocity ,  colorShaderProgram));
         }
         lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
     }
