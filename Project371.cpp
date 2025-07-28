@@ -185,7 +185,6 @@ int main(int argc, char*argv[])
         return -1;
     }
 
-    
     // Load Textures
     GLuint brickTextureID = loadTexture("Textures/building.jpg");
     GLuint cementTextureID = loadTexture("Textures/road.jpg");
@@ -453,6 +452,7 @@ int main(int argc, char*argv[])
         lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
     }
 
+    glfwDestroyWindow(window);
     glfwTerminate();
     
 	return 0;
