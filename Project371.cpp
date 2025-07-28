@@ -64,10 +64,6 @@ std::string readShaderFile(const char* filePath) {
 
 GLuint loadTexture(const char *filename);
 
-const char* getTexturedVertexShaderSource();
-
-const char* getTexturedFragmentShaderSource();
-
 int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource);
 
 struct TexturedColoredVertex
@@ -202,9 +198,11 @@ int main(int argc, char*argv[])
     // Compile and link shaders here ...
     string vertexSource = readShaderFile("Shaders/VertexShader.glsl");
     string fragmentSource = readShaderFile("Shaders/FragmentShader.glsl");
+    string texturedVertex = readShaderFile("Shaders/TexturedVertex.glsl");
+    string texturedFragment = readShaderFile("Shaders/TexturedFragment.glsl");
 
     int colorShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
-    int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
+    int texturedShaderProgram = compileAndLinkShaders(texturedVertex.c_str(), texturedFragment.c_str());
     
     // Camera parameters for view transform
     vec3 cameraPosition(0.6f,1.0f,10.0f);
@@ -460,47 +458,6 @@ int main(int argc, char*argv[])
     glfwTerminate();
     
 	return 0;
-}
-
-
-const char* getTexturedVertexShaderSource()
-{
-    return 
-        "#version 330 core\n"
-        "layout (location = 0) in vec3 aPos;"
-        "layout (location = 1) in vec3 aColor;"
-        "layout (location = 2) in vec2 aUV;"
-        ""
-        "uniform mat4 worldMatrix;"
-        "uniform mat4 viewMatrix = mat4(1.0);"   // default value for view matrix (identity)
-        "uniform mat4 projectionMatrix = mat4(1.0);"
-        ""
-        "out vec3 vertexColor;"
-        "out vec2 vertexUV;"
-        ""
-        "void main()"
-        "{"
-        "   vertexColor = aColor;"
-        "   mat4 modelViewProjection = projectionMatrix * viewMatrix * worldMatrix;"
-        "   gl_Position = modelViewProjection * vec4(aPos.x, aPos.y, aPos.z, 1.0);"
-        "   vertexUV = aUV;"
-        "}";
-}
-
-const char* getTexturedFragmentShaderSource()
-{
-    return 
-        "#version 330 core\n"
-        "in vec3 vertexColor;"
-        "in vec2 vertexUV;"
-        "uniform sampler2D textureSampler;"
-        ""
-        "out vec4 FragColor;"
-        "void main()"
-        "{"
-        "   vec4 textureColor = texture( textureSampler, vertexUV );"
-        "   FragColor = textureColor;"
-        "}";
 }
 
 int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource)
