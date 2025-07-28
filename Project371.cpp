@@ -903,7 +903,7 @@ GLuint loadTexture(const char *filename)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    // Step4 Upload the texture to the PU
+    // Step4 Upload the texture to the GPU
     GLenum format = 0;
     if (nrChannels == 1)
         format = GL_RED;
