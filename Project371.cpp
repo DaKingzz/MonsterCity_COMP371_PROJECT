@@ -37,7 +37,6 @@ public:
     void Draw() {
         // this is a bit of a shortcut, since we have a single vbo, it is already bound
         // let's just set the world matrix in the vertex shader
-        
         mat4 worldMatrix = translate(mat4(1.0f), mPosition) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(0.2f, 0.2f, 0.2f));
         glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
         glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -60,7 +59,6 @@ std::string readShaderFile(const char* filePath) {
     buffer << file.rdbuf();
     return buffer.str();
 }
-
 
 GLuint loadTexture(const char *filename);
 
@@ -156,16 +154,16 @@ int main(int argc, char*argv[])
     // Initialize GLFW and OpenGL version
     glfwInit();
     
-#if defined(PLATFORM_OSX)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#else
-    // On windows, we set OpenGL version to 2.1, to support more hardware
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-#endif
+    #if defined(PLATFORM_OSX)
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #else
+        // On windows, we set OpenGL version to 2.1, to support more hardware
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
+    #endif
 
     // Create Window and rendering context using GLFW, resolution is 800x600
     GLFWwindow* window = glfwCreateWindow(800, 600, "Comp371 - Lab 04", NULL, NULL);
