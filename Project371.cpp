@@ -308,6 +308,11 @@ void setWorldMatrix(int shaderProgram, mat4 worldMatrix)
 }
 
 
+ float GenerateRandomFloat(float min , float max){
+        return min + static_cast<float>(rand())/(static_cast<float>(RAND_MAX/(max -min)));
+    }
+
+
 int main(int argc, char*argv[])
 {
     // Initialize GLFW and OpenGL version
@@ -445,12 +450,18 @@ int main(int argc, char*argv[])
         "Textures/Skybox/back.jpg"
     };
 
-    std::vector<std::vector<float>> buildingHeights(20, std::vector<float>(20));
+    
+
+   
+
+    std::vector<std::vector<vec3>> buildingScaling(20, std::vector<vec3>(20));
     for (int i = 0; i < 20; ++i)
     {
         for (int j = 0; j < 20; ++j)
         {
-            buildingHeights[i][j] = 20.0f + rand() % 20;
+            //Randomly assignes scallers to the x,y,y of all the buildings
+            buildingScaling[i][j] =vec3(GenerateRandomFloat(3,4) ,GenerateRandomFloat(5,8)  ,GenerateRandomFloat(3.5,5) );
+            
         }
     }
 
@@ -504,26 +515,28 @@ int main(int argc, char*argv[])
         
         glDrawArrays(GL_TRIANGLES, 0, 36); // 36 vertices, starting at index 0
         
-        // Draw pillars
-        glBindTexture(GL_TEXTURE_2D, buildingTextureID);
-        mat4 pillarWorldMatrix = translate(mat4(1.0f), vec3(0.0f, 10.0f, 0.0f)) * scale(mat4(1.0f), vec3(2.0f, 20.0f, 2.0f));
-        setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
+        // Draw Building
+       int num_Blocks_x =3;
+       int num_Blocks_z =3;
+        float spacing_x = 8.0f;
+        float spacing_z = 8.0f;
+        float spacing_neighbor_z = 3.0f;
+   
         
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        float spacing = 40.0f;
-        
-        for (int i = 0; i < 20; ++i)
+        for (int i = 0; i < num_Blocks_x; ++i)
         {
-            for (int j = 0; j < 20; ++j)
+            for (int j = 0; j < num_Blocks_z ; ++j)
             {
-                float height = buildingHeights[i][j];
         
+
                 // Cement-textured building
                 glBindTexture(GL_TEXTURE_2D, buildingTextureID);
-                vec3 buildingPos = vec3(-100.0f + i * spacing, height / 2.0f, -100.0f + j * spacing);
-                mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(6.0f, height, 6.0f));
+                vec3 buildingPos = vec3(-10.0f + i * spacing_x,  buildingScaling[i][j].y/ 2.0f, -10.0f + j * spacing_z);
+                mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(buildingScaling[i][j].x,buildingScaling[i][j].y,  buildingScaling[i][j].z));
                 setWorldMatrix(texturedShaderProgram, buildingMatrix);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
+
+
     
             }
         }
