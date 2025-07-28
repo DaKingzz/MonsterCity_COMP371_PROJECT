@@ -14,12 +14,15 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
 using namespace glm;
 using namespace std;
+
+GLuint texturedCubeVAO;
 
 class Projectile
 {
@@ -47,6 +50,62 @@ private:
     vec3 mPosition;
     vec3 mVelocity;
 };
+
+class LightCube
+{
+public:
+    LightCube(vec3 orbitCenter, float orbitRadius, float orbitSpeed, float heightOffset, vec3 color, int shaderProgram)
+        : mOrbitCenter(orbitCenter), mOrbitRadius(orbitRadius), mOrbitSpeed(orbitSpeed),
+          mHeightOffset(heightOffset), mShaderProgram(shaderProgram), mColor(color), mAngle(0.0f)
+    {
+        mWorldMatrixLocation = glGetUniformLocation(shaderProgram, "worldMatrix");
+        mColorAttribLocation = glGetAttribLocation(shaderProgram, "aColor");
+    }
+
+    void Update(float dt)
+    {
+        mAngle += mOrbitSpeed * dt;
+        if (mAngle > 2.0f * M_PI) mAngle -= 2.0f * M_PI;
+
+        float x = mOrbitCenter.x + mOrbitRadius * cos(mAngle);
+        float z = mOrbitCenter.z + mOrbitRadius * sin(mAngle);
+        float y = mOrbitCenter.y + mHeightOffset;
+
+        mPosition = vec3(x, y, z);
+    }
+
+    void Draw()
+    {
+        glUseProgram(mShaderProgram);
+
+        mat4 worldMatrix = translate(mat4(1.0f), mPosition) * scale(mat4(1.0f), vec3(0.4f));
+        glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
+
+        glBindVertexArray(texturedCubeVAO);
+        glVertexAttrib3fv(mColorAttribLocation, &mColor[0]);
+
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+
+    void SetViewProjection(const mat4& view, const mat4& projection)
+    {
+        GLuint viewLoc = glGetUniformLocation(mShaderProgram, "viewMatrix");
+        GLuint projLoc = glGetUniformLocation(mShaderProgram, "projectionMatrix");
+        glUseProgram(mShaderProgram);
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+    }
+
+private:
+    float mAngle;
+    float mOrbitRadius, mOrbitSpeed, mHeightOffset;
+    vec3 mOrbitCenter, mPosition, mColor;
+
+    int mShaderProgram;
+    GLuint mWorldMatrixLocation;
+    GLuint mColorAttribLocation;
+};
+
 
 // Read the GLSL shader files
 std::string readShaderFile(const char* filePath) {
@@ -195,11 +254,16 @@ int main(int argc, char*argv[])
     // Compile and link shaders here ...
     string vertexSource = readShaderFile("Shaders/VertexShader.glsl");
     string fragmentSource = readShaderFile("Shaders/FragmentShader.glsl");
+
     string texturedVertex = readShaderFile("Shaders/TexturedVertex.glsl");
     string texturedFragment = readShaderFile("Shaders/TexturedFragment.glsl");
 
+    string lightVertex = readShaderFile("Shaders/LightCubeVertex.glsl");
+    string lightFragment = readShaderFile("Shaders/LightCubeFragment.glsl");
+
     int colorShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
     int texturedShaderProgram = compileAndLinkShaders(texturedVertex.c_str(), texturedFragment.c_str());
+    int lightCubeShaderProgram = compileAndLinkShaders(lightVertex.c_str(), lightFragment.c_str());
     
     // Camera parameters for view transform
     vec3 cameraPosition(0.6f,1.0f,10.0f);
@@ -219,7 +283,7 @@ int main(int argc, char*argv[])
     // Set projection matrix for shader, this won't change
     mat4 projectionMatrix = glm::perspective(70.0f,            // field of view in degrees
                                              800.0f / 600.0f,  // aspect ratio
-                                             0.01f, 100.0f);   // near and far (near > 0)
+                                             0.01f, 300.0f);   // near and far (near > 0)
     
     // Set initial view matrix
     mat4 viewMatrix = lookAt(cameraPosition,  // eye
@@ -234,7 +298,7 @@ int main(int argc, char*argv[])
     setProjectionMatrix(texturedShaderProgram, projectionMatrix);
 
     // Define and upload geometry to the GPU here ...
-    int texturedCubeVAO = createTexturedCubeVertexArrayObject();
+    texturedCubeVAO = createTexturedCubeVertexArrayObject();
 
     // For frame time
     float lastFrameTime = glfwGetTime();
@@ -251,6 +315,13 @@ int main(int argc, char*argv[])
     list<Projectile> projectileList;
 
     glBindVertexArray(texturedCubeVAO);
+    
+    // Set up of light cubes
+    vec3 orbitCenter = vec3(0.0f, 0.0f, 0.0f); // Point around which cubes orbit
+
+    LightCube lightCube1(orbitCenter, 10.0f, 1.5f, 5.0f, vec3(1.0f, 0.6f, 0.1f), lightCubeShaderProgram); // Orange
+    LightCube lightCube2(orbitCenter, 15.0f, 1.0f, 8.0f, vec3(0.1f, 0.6f, 1.0f), lightCubeShaderProgram); // Blue
+
 
     // Entering Main Loop
     while(!glfwWindowShouldClose(window))
@@ -341,7 +412,33 @@ int main(int argc, char*argv[])
         }
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
+        // Update light cubes
+        lightCube1.Update(dt);
+        lightCube2.Update(dt);
+
+        // Set view/proj for them
+        lightCube1.SetViewProjection(viewMatrix, projectionMatrix);
+        lightCube2.SetViewProjection(viewMatrix, projectionMatrix);
+
+        glBindTexture(GL_TEXTURE_2D, 0); // Make sure no texture is bound
+
+        // Activate your light cube shader
+        glUseProgram(lightCubeShaderProgram);
+
+        // Set uniform color of the light (e.g., yellowish)
+        glm::vec3 lightColor(1.0f, 0.9f, 0.6f); // Any RGB color
+        GLuint lightColorLoc = glGetUniformLocation(lightCubeShaderProgram, "lightColor");
+        glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
+
+        // Set MVP matrix for this specific light cube
+        GLuint mvpLoc = glGetUniformLocation(lightCubeShaderProgram, "MVP");
+        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, glm::value_ptr(lightCubeMVP));
+
+        glBindVertexArray(texturedCubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
         
+        lightCube1.Draw();
+        lightCube2.Draw();
         
         // End Frame
         glfwSwapBuffers(window);
