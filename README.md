@@ -2,6 +2,6 @@ Keyboard + Mouse Control: <br>
 W A S D + Left Click to shoot
 
 Team Members: <br>
-Pai Peng - 40155601
-<>
-<>
+Pai Peng - 40155601 <br>
+<> <br>
+<> <br>
