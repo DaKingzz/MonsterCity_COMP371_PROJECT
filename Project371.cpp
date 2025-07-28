@@ -24,6 +24,12 @@ using namespace std;
 
 GLuint texturedCubeVAO;
 
+glm::vec3 lightCubePositions[] = {
+    glm::vec3(3.0f, 1.0f, 0.0f),
+    glm::vec3(-3.0f, 1.0f, 0.0f)
+};
+
+
 class Projectile
 {
 public:
@@ -422,20 +428,38 @@ int main(int argc, char*argv[])
 
         glBindTexture(GL_TEXTURE_2D, 0); // Make sure no texture is bound
 
-        // Activate your light cube shader
+        // Use the light cube shader
         glUseProgram(lightCubeShaderProgram);
 
-        // Set uniform color of the light (e.g., yellowish)
-        glm::vec3 lightColor(1.0f, 0.9f, 0.6f); // Any RGB color
+        // Set the light color once
+        glm::vec3 lightColor(1.0f, 0.9f, 0.6f);
         GLuint lightColorLoc = glGetUniformLocation(lightCubeShaderProgram, "lightColor");
         glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
 
-        // Set MVP matrix for this specific light cube
-        GLuint mvpLoc = glGetUniformLocation(lightCubeShaderProgram, "MVP");
-        glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, glm::value_ptr(lightCubeMVP));
+        // For each light cube
+        for (int i = 0; i < 2; ++i) {
+            // Animate flying motion (optional)
+            float time = glfwGetTime();
+            float angle = time + i * 3.14f; // offset the cubes
 
-        glBindVertexArray(texturedCubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+            glm::vec3 basePos = lightCubePositions[i];
+            float radius = 2.0f;
+            glm::vec3 animatedPos = basePos + glm::vec3(cos(angle) * radius, 0.0f, sin(angle) * radius);
+
+            // Create Model matrix
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, animatedPos);
+            model = glm::scale(model, glm::vec3(0.2f)); // smaller cube
+
+            // MVP
+            glm::mat4 mvp = projectionMatrix * viewMatrix * model;
+            GLuint mvpLoc = glGetUniformLocation(lightCubeShaderProgram, "MVP");
+            glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
+
+            // Bind VAO and draw
+            glBindVertexArray(texturedCubeVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
         
         lightCube1.Draw();
         lightCube2.Draw();
