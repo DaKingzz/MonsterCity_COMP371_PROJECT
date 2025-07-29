@@ -1,8 +1,5 @@
 //
-// COMP 371 Labs Framework
-//
-// Created by Nicolas Bergeron on 20/06/2019.
-//
+// COMP 371 Assignment
 
 #include <iostream>
 #include <list>
@@ -18,7 +15,6 @@
 
 #include <GLFW/glfw3.h> // GLFW provides a cross-platform interface for creating a graphical context,
                         // initializing OpenGL and binding inputs
-
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
@@ -58,15 +54,11 @@ public:
     {
         mWorldMatrixLocation = glGetUniformLocation(shaderProgram, "worldMatrix");
     }
-    
-    void Update(float dt)
-    {
-        mPosition += mVelocity * dt;
-    }
-    
+    void Update(float dt) { mPosition += mVelocity * dt;}
     void Draw() {
         // this is a bit of a shortcut, since we have a single vbo, it is already bound
         // let's just set the world matrix in the vertex shader
+
          vec3 dir =normalize(mVelocity);
       //   mat4 scaleMatrix = scale(mat4(1.0f),vec3(0.75f, 0.05f, 0.1f));
          vec3 up = vec3(0.0f, 1.0f, 0.0f);
@@ -84,8 +76,8 @@ public:
 
     glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
     }
-    
 private:
     GLuint mWorldMatrixLocation;
     vec3 mPosition;
@@ -146,6 +138,7 @@ const char* getFragmentShaderSource();
 const char* getTexturedVertexShaderSource();
 
 const char* getTexturedFragmentShaderSource();
+
 
 const char* getSkyboxVertexShader() {
     return R"(
@@ -364,7 +357,7 @@ int main(int argc, char*argv[])
 #endif
 
     // Create Window and rendering context using GLFW, resolution is 800x600
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Comp371 - Lab 04", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(800, 600, "Comp371 - Assignment", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
@@ -484,10 +477,6 @@ int main(int argc, char*argv[])
         "Textures/Skybox/back.jpg"
     };
 
-    
-
-   
-
     std::vector<std::vector<vec3>> buildingScaling(20, std::vector<vec3>(20));
     for (int i = 0; i < 20; ++i)
     {
@@ -495,7 +484,6 @@ int main(int argc, char*argv[])
         {
             //Randomly assignes scallers to the x,y,y of all the buildings
             buildingScaling[i][j] =vec3(GenerateRandomFloat(3,4) ,GenerateRandomFloat(5,8)  ,GenerateRandomFloat(3.5,5) );
-            
         }
     }
 
@@ -561,17 +549,12 @@ int main(int argc, char*argv[])
         {
             for (int j = 0; j < num_Blocks_z ; ++j)
             {
-        
-
                 // Cement-textured building
                 glBindTexture(GL_TEXTURE_2D, buildingTextureID);
                 vec3 buildingPos = vec3(-10.0f + i * spacing_x,  buildingScaling[i][j].y/ 2.0f, -10.0f + j * spacing_z);
                 mat4 buildingMatrix = translate(mat4(1.0f), buildingPos) * scale(mat4(1.0f), vec3(buildingScaling[i][j].x,buildingScaling[i][j].y,  buildingScaling[i][j].z));
                 setWorldMatrix(texturedShaderProgram, buildingMatrix);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
-
-
-    
             }
         }
 
@@ -588,7 +571,8 @@ int main(int argc, char*argv[])
 
         glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
-        // === Animate light positions ===
+
+        // Animate light positions 
         float radius = 40.0f;
         float height = 30.0f;
 
@@ -604,13 +588,13 @@ int main(int argc, char*argv[])
             sin(time + glm::pi<float>()) * radius
         );
 
-        // === Set lighting uniforms for textured geometry ===
+        // Set lighting uniforms for textured geometry
         glUseProgram(texturedShaderProgram);
         glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos"), 1, glm::value_ptr(lightPosition1));
         glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos2"), 1, glm::value_ptr(lightPosition2));
         glUniform3fv(glGetUniformLocation(texturedShaderProgram, "viewPos"), 1, glm::value_ptr(cameraPosition));
 
-        // === Draw visual light cubes ===
+        // Draw visual light cubes
         glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
 
@@ -628,7 +612,7 @@ int main(int argc, char*argv[])
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel2));
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        // Set model/view/proj uniforms here too if not already done
+        // TODO Set model/view/proj uniforms, so it works I think
 
         // Draw scene objects affected by light
         glBindVertexArray(texturedCubeVAO);  // Your ground or building or textured cube
@@ -641,10 +625,6 @@ int main(int argc, char*argv[])
         // and in world space for third person camera
         if (cameraFirstPerson)
         {
-            // Wolrd matrix is identity, but view transform like a world transform relative to camera basis
-            // (1 unit in front of camera)
-            //
-            // This is similar to a weapon moving with camera in a shooter game
             mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.0f)) *
                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
                                           scale(mat4(1.0f), vec3(0.01f, 0.01f, 0.01f));
@@ -654,7 +634,6 @@ int main(int argc, char*argv[])
         }
         else
         {
-            // In third person view, let's draw the spinning cube in world space, like any other models
             mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), cameraPosition) *
                                            rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
                                            scale(mat4(1.0f), vec3(0.1f, 0.1f, 0.1f));
@@ -663,8 +642,7 @@ int main(int argc, char*argv[])
         }
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        
-        
+           
         // End Frame
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -683,15 +661,12 @@ int main(int argc, char*argv[])
             cameraFirstPerson = false;
         }
 
-        
-        // This was solution for Lab02 - Moving camera exercise
-        // We'll change this to be a first or third person camera
+        // Camera Movement
         bool fastCam = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
         float currentCameraSpeed = (fastCam) ? cameraFastSpeed : cameraSpeed;
         
-        
-        // - Calculate mouse motion dx and dy
-        // - Update camera horizontal and vertical angle
+        // Calculate mouse motion dx and dy
+        // Update camera horizontal and vertical angle
         double mousePosX, mousePosY;
         glfwGetCursorPos(window, &mousePosX, &mousePosY);
         
@@ -755,14 +730,12 @@ int main(int argc, char*argv[])
             vec3 position = cameraPosition - vec3(radius * cosf(phi)*cosf(theta),
                                                   radius * sinf(phi),
                                                   -radius * cosf(phi)*sinf(theta));
-;
             viewMatrix = lookAt(position, cameraPosition, cameraUp);
         }
         
         setViewMatrix(colorShaderProgram, viewMatrix);
         setViewMatrix(texturedShaderProgram, viewMatrix);
-
-        
+ 
         // Shoot projectiles on mouse left click
         // To detect onPress events, we need to check the last state and the current state to detect the state change
         // Otherwise, you would shoot many projectiles on each mouse press
