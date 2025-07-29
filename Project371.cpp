@@ -68,14 +68,16 @@ public:
         mColorAttribLocation = glGetAttribLocation(shaderProgram, "aColor");
     }
 
-    void Update(float dt)
+    void Update(float dt, vec3 orbitCenter, float angleOffset = 0.0f)
     {
         mAngle += mOrbitSpeed * dt;
         if (mAngle > 2.0f * M_PI) mAngle -= 2.0f * M_PI;
 
-        float x = mOrbitCenter.x + mOrbitRadius * cos(mAngle);
-        float z = mOrbitCenter.z + mOrbitRadius * sin(mAngle);
-        float y = mOrbitCenter.y + mHeightOffset;
+        float angle = mAngle + angleOffset;
+
+        float x = orbitCenter.x + mOrbitRadius * cos(angle);
+        float z = orbitCenter.z + mOrbitRadius * sin(angle);
+        float y = orbitCenter.y + mHeightOffset;
 
         mPosition = vec3(x, y, z);
     }
@@ -84,23 +86,34 @@ public:
     {
         glUseProgram(mShaderProgram);
 
-        mat4 worldMatrix = translate(mat4(1.0f), mPosition) * scale(mat4(1.0f), vec3(0.4f));
-        glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
+        assert(glGetUniformLocation(mShaderProgram, "viewMatrix") != -1);
+        assert(glGetUniformLocation(mShaderProgram, "projectionMatrix") != -1);
+        assert(glGetUniformLocation(mShaderProgram, "lightColor") != -1);
+
+
+        mat4 worldMatrix = glm::translate(mat4(1.0f), mPosition) * glm::scale(mat4(1.0f), vec3(0.4f));
+        GLuint worldLoc = glGetUniformLocation(mShaderProgram, "worldMatrix");
+        glUniformMatrix4fv(worldLoc, 1, GL_FALSE, glm::value_ptr(worldMatrix));
+
+        GLuint colorLoc = glGetUniformLocation(mShaderProgram, "lightColor");
+        glUniform3fv(colorLoc, 1, glm::value_ptr(mColor));
 
         glBindVertexArray(texturedCubeVAO);
-        glVertexAttrib3fv(mColorAttribLocation, &mColor[0]);
-
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 
     void SetViewProjection(const mat4& view, const mat4& projection)
     {
+        glUseProgram(mShaderProgram);
         GLuint viewLoc = glGetUniformLocation(mShaderProgram, "viewMatrix");
         GLuint projLoc = glGetUniformLocation(mShaderProgram, "projectionMatrix");
-        glUseProgram(mShaderProgram);
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, &view[0][0]);
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, &projection[0][0]);
+
+        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
+        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
     }
+
+
+    vec3 GetPosition() const { return mPosition; }
 
 private:
     float mAngle;
@@ -238,8 +251,11 @@ int main(int argc, char*argv[])
         glfwTerminate();
         return -1;
     }
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetCursorPosCallback(window, mouse_callback);
+    glfwSetScrollCallback(window, scroll_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 
     
     // Initialize GLEW
@@ -325,9 +341,8 @@ int main(int argc, char*argv[])
     // Set up of light cubes
     vec3 orbitCenter = vec3(0.0f, 0.0f, 0.0f); // Point around which cubes orbit
 
-    LightCube lightCube1(orbitCenter, 10.0f, 1.5f, 5.0f, vec3(1.0f, 0.6f, 0.1f), lightCubeShaderProgram); // Orange
-    LightCube lightCube2(orbitCenter, 15.0f, 1.0f, 8.0f, vec3(0.1f, 0.6f, 1.0f), lightCubeShaderProgram); // Blue
-
+    LightCube lightCube1(vec3(0.0f), 10.0f, 1.5f, 5.0f, vec3(1.0f), lightCubeShaderProgram);
+    LightCube lightCube2(vec3(0.0f), 10.0f, 1.5f, 5.0f, vec3(1.0f), lightCubeShaderProgram);
 
     // Entering Main Loop
     while(!glfwWindowShouldClose(window))
@@ -338,9 +353,22 @@ int main(int argc, char*argv[])
 
         // Each frame, reset color of each pixel to glClearColor
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
-        // Draw textured geometry
+
+        // === 1. UPDATE LIGHT CUBE POSITIONS ===
+        lightCube1.Update(dt, cameraPosition, 0.0f);
+        lightCube2.Update(dt, cameraPosition, glm::pi<float>());
+
+        // === 2. SEND LIGHT UNIFORMS TO TEXTURED SHADER ===
         glUseProgram(texturedShaderProgram);
+        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos1"), 1, glm::value_ptr(lightCube1.GetPosition()));
+        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos2"), 1, glm::value_ptr(lightCube2.GetPosition()));
+        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightColor1"), 1, glm::value_ptr(glm::vec3(1.0f)));
+        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightColor2"), 1, glm::value_ptr(glm::vec3(1.0f)));
+        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "viewPos"), 1, glm::value_ptr(cameraPosition));
+
+        // === 3. SEND MATRICES TO TEXTURED SHADER ===
+        glUniformMatrix4fv(glGetUniformLocation(texturedShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(texturedShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
 
         glActiveTexture(GL_TEXTURE0);
         GLuint textureLocation = glGetUniformLocation(texturedShaderProgram, "textureSampler");
@@ -418,14 +446,6 @@ int main(int argc, char*argv[])
         }
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
-        // Update light cubes
-        lightCube1.Update(dt);
-        lightCube2.Update(dt);
-
-        // Set view/proj for them
-        lightCube1.SetViewProjection(viewMatrix, projectionMatrix);
-        lightCube2.SetViewProjection(viewMatrix, projectionMatrix);
-
         glBindTexture(GL_TEXTURE_2D, 0); // Make sure no texture is bound
 
         // Use the light cube shader
@@ -435,32 +455,13 @@ int main(int argc, char*argv[])
         glm::vec3 lightColor(1.0f, 0.9f, 0.6f);
         GLuint lightColorLoc = glGetUniformLocation(lightCubeShaderProgram, "lightColor");
         glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
-
-        // For each light cube
-        for (int i = 0; i < 2; ++i) {
-            // Animate flying motion (optional)
-            float time = glfwGetTime();
-            float angle = time + i * 3.14f; // offset the cubes
-
-            glm::vec3 basePos = lightCubePositions[i];
-            float radius = 2.0f;
-            glm::vec3 animatedPos = basePos + glm::vec3(cos(angle) * radius, 0.0f, sin(angle) * radius);
-
-            // Create Model matrix
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, animatedPos);
-            model = glm::scale(model, glm::vec3(0.2f)); // smaller cube
-
-            // MVP
-            glm::mat4 mvp = projectionMatrix * viewMatrix * model;
-            GLuint mvpLoc = glGetUniformLocation(lightCubeShaderProgram, "MVP");
-            glUniformMatrix4fv(mvpLoc, 1, GL_FALSE, glm::value_ptr(mvp));
-
-            // Bind VAO and draw
-            glBindVertexArray(texturedCubeVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
         
+
+        // === 5. SET VIEW/PROJECTION FOR LIGHT CUBES ===
+        lightCube1.SetViewProjection(viewMatrix, projectionMatrix);
+        lightCube2.SetViewProjection(viewMatrix, projectionMatrix);
+        
+        // === 6. DRAW LIGHT CUBES ===
         lightCube1.Draw();
         lightCube2.Draw();
         

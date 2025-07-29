@@ -1,10 +1,8 @@
 #version 330 core
 
-varying vec3 fragColor;
-varying vec3 fragPosition;
+in vec3 fragLightColor;
+out vec4 FragColor;
 
-void main()
-{
-    // simple emissive color
-    gl_FragColor = vec4(fragColor, 1.0);
+void main() {
+    FragColor = vec4(fragLightColor, 1.0); // visible color of the light cube
 }
