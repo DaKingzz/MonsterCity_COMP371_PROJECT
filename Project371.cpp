@@ -390,18 +390,18 @@ int main(int argc, char*argv[])
     std::string vertexSource = readShaderFile("shaders/texture_vertex.glsl");
     std::string fragmentSource = readShaderFile("shaders/texture_fragment.glsl");
 
-    std::string lightVertexSource = readShaderFile("shaders/light_vertex.glsl");
-    std::string lightFragmentSource = readShaderFile("shaders/light_fragment.glsl");
+    std::string lightCubeVertexSource = readShaderFile("shaders/light_cube_vertex.glsl");
+    std::string lightCubeFragmentSource = readShaderFile("shaders/light_cube_fragment.glsl");
 
     
     // Compile and link shaders here ...
     int colorShaderProgram = compileAndLinkShaders(getVertexShaderSource(), getFragmentShaderSource());
     // int texturedShaderProgram = compileAndLinkShaders(getTexturedVertexShaderSource(), getTexturedFragmentShaderSource());
-    GLuint lightShaderProgram = compileAndLinkShaders(lightVertexSource.c_str(), lightFragmentSource.c_str());
+    GLuint lightCubeShaderProgram = compileAndLinkShaders(lightCubeVertexSource.c_str(), lightCubeFragmentSource.c_str());
     GLuint texturedShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
 
     // Camera parameters for view transform
-    vec3 cameraPosition(0.6f,1.0f,10.0f);
+    vec3 cameraPosition(0.6f,30.0f,10.0f);
     vec3 cameraLookAt(0.0f, 0.0f, -1.0f);
     vec3 cameraUp(0.0f, 1.0f, 0.0f);
     
@@ -569,7 +569,6 @@ int main(int argc, char*argv[])
         }
         
 
-        glUseProgram(lightShaderProgram);
         glBindVertexArray(lightCubeVAO);
 
         // Animate light positions 
@@ -583,9 +582,9 @@ int main(int argc, char*argv[])
         );
 
         glm::vec3 lightPosition2 = glm::vec3(
-            cos(time + glm::pi<float>()) * radius,
+            40.0f * sin(time * 0.5f),  // Move back and forth along a longer X axis
             height,
-            sin(time + glm::pi<float>()) * radius
+            10.0f
         );
 
         // Set lighting uniforms for textured geometry
@@ -595,21 +594,23 @@ int main(int argc, char*argv[])
         glUniform3fv(glGetUniformLocation(texturedShaderProgram, "viewPos"), 1, glm::value_ptr(cameraPosition));
 
         // Draw visual light cubes
-        glUseProgram(lightShaderProgram);
+        glUseProgram(lightCubeShaderProgram);
         glBindVertexArray(lightCubeVAO);
 
         // Light cube 1
         glm::mat4 lightModel1 = glm::translate(glm::mat4(1.0f), lightPosition1)
-                            * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel1));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+                            * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));  // Make it bigger
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel1));
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // Light cube 2
         glm::mat4 lightModel2 = glm::translate(glm::mat4(1.0f), lightPosition2)
-                            * glm::scale(glm::mat4(1.0f), glm::vec3(5.0f));
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel2));
+                            * glm::scale(glm::mat4(1.0f), glm::vec3(2.0f));  // Make it bigger
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "worldMatrix"), 1, GL_FALSE, glm::value_ptr(lightModel2));
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
+        glUniformMatrix4fv(glGetUniformLocation(lightCubeShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
         glDrawArrays(GL_TRIANGLES, 0, 36);
 
         // TODO Set model/view/proj uniforms, so it works I think
