@@ -15,6 +15,5 @@ struct TexturedColoredVertex
 // Extern declarations for geometry arrays
 extern const TexturedColoredVertex texturedCubeVertexArray[];
 extern const size_t texturedCubeVertexArrayCount;
-extern const float cubeVertices[];
 extern const float skyboxVertices[];
 extern const size_t skyboxVerticesCount;
