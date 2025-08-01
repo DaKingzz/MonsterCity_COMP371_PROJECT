@@ -7,4 +7,4 @@ Arturo Sanchez E - 40283236 <br>
 Jared Latchman - 40214398 <br>
 
 **Command to run with g++:** <br>
-g++ -Iexternal -std=c++11 -Wall -Wextra -g Project371.cpp projectile.cpp shaders.cpp texture.cpp vertex.cpp -o Project371 -lGL -lglfw -lGLEW
+g++ -Iexternal -std=c++11 -Wall -Wextra -g Project371.cpp projectile.cpp shaders.cpp texture.cpp geometry.cpp vertex.cpp -o Project371 -lGL -lglfw -lGLEW
