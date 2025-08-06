@@ -1,11 +1,16 @@
-// COMP 371 Assignment
-
 #include <iostream>
 #include <string>
+#include <vector>
+#include <cstdlib>
+#include <ctime>
 #include <list>
-#include <algorithm>
-#include <sstream>
-#include <fstream>
+
+#include "shader.h"
+#include "geometry.h"
+#include "camera.h"
+#include "renderer.h"
+#include "texture.h"
+#include "projectile.h"
 
 #define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
 #include <GL/glew.h>    // Include GLEW - OpenGL Extension Wrangler
@@ -14,222 +19,324 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb/stb_image.h>
-
-using namespace glm;
 using namespace std;
+using namespace glm;
 
-GLuint texturedCubeVAO;
-
-glm::vec3 lightCubePositions[] = {
-    glm::vec3(3.0f, 1.0f, 0.0f),
-    glm::vec3(-3.0f, 1.0f, 0.0f)
-};
-
-
-class Projectile
-{
-public:
-    Projectile(vec3 position, vec3 velocity, int shaderProgram) : mPosition(position), mVelocity(velocity)
-    {
-        mWorldMatrixLocation = glGetUniformLocation(shaderProgram, "worldMatrix");
-    }
-    
-    void Update(float dt)
-    {
-        mPosition += mVelocity * dt;
-    }
-    
-    void Draw() {
-        // this is a bit of a shortcut, since we have a single vbo, it is already bound
-        // let's just set the world matrix in the vertex shader
-        mat4 worldMatrix = translate(mat4(1.0f), mPosition) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(0.2f, 0.2f, 0.2f));
-        glUniformMatrix4fv(mWorldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-    }
-    
-private:
-    GLuint mWorldMatrixLocation;
-    vec3 mPosition;
-    vec3 mVelocity;
-};
-
-class LightCube
-{
-public:
-    LightCube(vec3 orbitCenter, float orbitRadius, float orbitSpeed, float heightOffset, vec3 color, int shaderProgram)
-        : mOrbitCenter(orbitCenter), mOrbitRadius(orbitRadius), mOrbitSpeed(orbitSpeed),
-          mHeightOffset(heightOffset), mShaderProgram(shaderProgram), mColor(color), mAngle(0.0f)
-    {
-        mWorldMatrixLocation = glGetUniformLocation(shaderProgram, "worldMatrix");
-        mColorAttribLocation = glGetAttribLocation(shaderProgram, "aColor");
-    }
-
-    void Update(float dt, vec3 orbitCenter, float angleOffset = 0.0f)
-    {
-        mAngle += mOrbitSpeed * dt;
-        if (mAngle > 2.0f * M_PI) mAngle -= 2.0f * M_PI;
-
-        float angle = mAngle + angleOffset;
-
-        float x = orbitCenter.x + mOrbitRadius * cos(angle);
-        float z = orbitCenter.z + mOrbitRadius * sin(angle);
-        float y = orbitCenter.y + mHeightOffset;
-
-        mPosition = vec3(x, y, z);
-    }
-
-    void Draw()
-    {
-        glUseProgram(mShaderProgram);
-
-        assert(glGetUniformLocation(mShaderProgram, "viewMatrix") != -1);
-        assert(glGetUniformLocation(mShaderProgram, "projectionMatrix") != -1);
-        assert(glGetUniformLocation(mShaderProgram, "lightColor") != -1);
-
-
-        mat4 worldMatrix = glm::translate(mat4(1.0f), mPosition) * glm::scale(mat4(1.0f), vec3(0.4f));
-        GLuint worldLoc = glGetUniformLocation(mShaderProgram, "worldMatrix");
-        glUniformMatrix4fv(worldLoc, 1, GL_FALSE, glm::value_ptr(worldMatrix));
-
-        GLuint colorLoc = glGetUniformLocation(mShaderProgram, "lightColor");
-        glUniform3fv(colorLoc, 1, glm::value_ptr(mColor));
-
-        glBindVertexArray(texturedCubeVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-    }
-
-    void SetViewProjection(const mat4& view, const mat4& projection)
-    {
-        glUseProgram(mShaderProgram);
-        GLuint viewLoc = glGetUniformLocation(mShaderProgram, "viewMatrix");
-        GLuint projLoc = glGetUniformLocation(mShaderProgram, "projectionMatrix");
-
-        glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(projection));
-    }
-
-
-    vec3 GetPosition() const { return mPosition; }
-
-private:
-    float mAngle;
-    float mOrbitRadius, mOrbitSpeed, mHeightOffset;
-    vec3 mOrbitCenter, mPosition, mColor;
-
-    int mShaderProgram;
-    GLuint mWorldMatrixLocation;
-    GLuint mColorAttribLocation;
-};
-
-
-// Read the GLSL shader files
-std::string readShaderFile(const char* filePath) {
-    std::ifstream file(filePath);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open shader file: " << filePath << std::endl;
-        return "";
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
-
-GLuint loadTexture(const char *filename);
-
-int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource);
-
-struct TexturedColoredVertex
-{
-    TexturedColoredVertex(vec3 _position, vec3 _color, vec2 _uv)
-    : position(_position), color(_color), uv(_uv) {}
-    
+struct Tower {
     vec3 position;
-    vec3 color;
-    vec2 uv;
+    float height;
 };
 
-// Textured Cube model
-const TexturedColoredVertex texturedCubeVertexArray[] = {  // position,                            color
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(0.0f, 0.0f)), //left - red
-    TexturedColoredVertex(vec3(-0.5f,-0.5f, 0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(0.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(1.0f, 1.0f)),
-    
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f,-0.5f), vec3(1.0f, 0.0f, 0.0f), vec2(1.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1.0f, 1.0f)), // far - blue
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(0.0f, 1.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3( 0.5f,-0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(1.0f, 0.0f)),
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(0.0f, 0.0f, 1.0f), vec2(0.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(1.0f, 1.0f)), // bottom - turquoise
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3( 0.5f,-0.5f,-0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(1.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(0.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f,-0.5f,-0.5f), vec3(0.0f, 1.0f, 1.0f), vec2(0.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0.0f, 1.0f)), // near - green
-    TexturedColoredVertex(vec3(-0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3( 0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(1.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(0.0f, 1.0f)),
-    TexturedColoredVertex(vec3( 0.5f,-0.5f, 0.5f), vec3(0.0f, 1.0f, 0.0f), vec2(1.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f, 0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(1.0f, 1.0f)), // right - purple
-    TexturedColoredVertex(vec3( 0.5f,-0.5f,-0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3( 0.5f, 0.5f,-0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(1.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f,-0.5f,-0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3( 0.5f, 0.5f, 0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3( 0.5f,-0.5f, 0.5f), vec3(1.0f, 0.0f, 1.0f), vec2(0.0f, 1.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f, 0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(1.0f, 1.0f)), // top - yellow
-    TexturedColoredVertex(vec3( 0.5f, 0.5f,-0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(1.0f, 0.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f,-0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0.0f, 0.0f)),
-    
-    TexturedColoredVertex(vec3( 0.5f, 0.5f, 0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(1.0f, 1.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f,-0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0.0f, 0.0f)),
-    TexturedColoredVertex(vec3(-0.5f, 0.5f, 0.5f), vec3(1.0f, 1.0f, 0.0f), vec2(0.0f, 1.0f))
-};
+// Texture Index
+// -------------
+constexpr int ROAD_TEX_SLOT = 0;
+constexpr int BUILDING_TEX_SLOT = 1;
+constexpr int LAMP_TEX_SLOT = 2;
+constexpr int LASER_TEX_SLOT = 3;
 
-int createTexturedCubeVertexArrayObject();
+// Variables to call and define later
+// ----------------------------------
+GLFWwindow* window = nullptr;
+float spinningCubeAngle = 0.0f;
+Geometry geometry;
+GLuint lightCubeVAO;
+Shader* lightCubeShader;
+vector<Tower> towerList;
+list<Projectile> projectileList;
 
-void setProjectionMatrix(int shaderProgram, mat4 projectionMatrix)
-{
-    glUseProgram(shaderProgram);
-    GLuint projectionMatrixLocation = glGetUniformLocation(shaderProgram, "projectionMatrix");
-    glUniformMatrix4fv(projectionMatrixLocation, 1, GL_FALSE, &projectionMatrix[0][0]);
-}
+// Methods to call and define later
+// --------------------------------
+void processInput(GLFWwindow *window);
+bool InitContext();
+void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint groundTex, GLuint buildingTex);
+void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex);
+void renderProjectiles(Shader& shader, GLuint tex);
+void renderAvatar(Shader& shader);
 
-void setViewMatrix(int shaderProgram, mat4 viewMatrix)
-{
-    glUseProgram(shaderProgram);
-    GLuint viewMatrixLocation = glGetUniformLocation(shaderProgram, "viewMatrix");
-    glUniformMatrix4fv(viewMatrixLocation, 1, GL_FALSE, &viewMatrix[0][0]);
-}
+// Screen Settings
+// ---------------
+const unsigned int SCR_WIDTH = 1024;
+const unsigned int SCR_HEIGHT = 768;
 
-void setWorldMatrix(int shaderProgram, mat4 worldMatrix)
-{
-    glUseProgram(shaderProgram);
-    GLuint worldMatrixLocation = glGetUniformLocation(shaderProgram, "worldMatrix");
-    glUniformMatrix4fv(worldMatrixLocation, 1, GL_FALSE, &worldMatrix[0][0]);
-}
+// Camera Settings for View Transfom
+// ---------------------------------
+Camera camera;
+bool cameraFirstPerson = true;
+float dt;
 
+// Frame Parameters + Mouse Parameters
+// -----------------------------------
+float lastFrameTime;
+int lastMouseLeftState;
+double lastMousePosX, lastMousePosY;
 
-int main(int argc, char*argv[])
-{
+// Main Function
+// -------------
+int main(){
+    
     // Initialize GLFW and OpenGL version
+    // ----------------------------------
+    if (!InitContext()) return -1;
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    // Configure Global openGL State
+    // -----------------------------
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
+
+    // Load and Create Textures
+    // ------------------------
+    GLuint roadTextureID = Texture::load("Textures/road.jpg");
+    GLuint buildingTextureID = Texture::load("Textures/building.jpg");
+    GLuint lampTextureID = Texture::load("Textures/lamp.png");
+    GLuint laserTextureID = Texture::load("Textures/laser.png");
+
+    // Build and Compile and Link Shaders
+    // ----------------------------------
+    Shader lightingShaderProgram("Shaders/Phong.vert", "Shaders/Phong.frag");
+    lightCubeShader = &lightingShaderProgram;
+
+    // Manage Building Postions Generation
+    // -----------------------------------
+    srand(static_cast<unsigned>(time(0))); // RNG
+    int numTowers = 100;
+    float minDist = 5.0f;
+    float maxRange = 40.0f;
+    for (int i = 0; i < numTowers; ++i) {
+        float x = static_cast<float>((rand() % static_cast<int>(2 * maxRange)) - static_cast<int>(maxRange));
+        float z = static_cast<float>((rand() % static_cast<int>(2 * maxRange)) - static_cast<int>(maxRange));
+        if (glm::length(glm::vec2(x, z)) < minDist) continue;
+        float height = 5.0f + static_cast<float>(rand() % 20);
+        towerList.push_back({ glm::vec3(x, 0.0f, z), height });
+    }
+
+    // Set up Models
+    // -------------
+
+    // Set initial transformation matrices to shaders
+    mat4 projectionMatrix = glm::perspective(radians(70.0f), SCR_WIDTH * 1.0f / SCR_HEIGHT, 0.03f, 800.0f);
+    Renderer::setProjectionMatrix(lightingShaderProgram.getID(), projectionMatrix);
+    mat4 identity = mat4(1.0f);
+    Renderer::setWorldMatrix(lightingShaderProgram.getID(), identity);
+
+    // Set up Vertex Data (buffers)
+    // ----------------------------
+    lightCubeVAO = geometry.createLightCube();
+
+    // Frame time calculations for mouse (Comes with Frame Parameters at the top of this file)
+    // ---------------------------------------------------------------------------------------
+    lastFrameTime = glfwGetTime();
+    int lastMouseLeftState = GLFW_RELEASE;
+    glfwGetCursorPos(window, &lastMousePosX, &lastMousePosY);
+
+    // Light cube parameters
+    // ---------------------
+    vec3 center = vec3(0.0f, 5.0f, 0.0f);
+    float radius = 10.0f;
+    auto getLightPos = [&](float timeOffset, float time) -> vec3 {
+        return vec3(cos(time + timeOffset) * radius, 0.0f, sin(time + timeOffset) * radius) + center;
+    };
+
+    // Render Loop
+    // -----------
+    while(!glfwWindowShouldClose(window)){
+        // Frame time calculation
+        // ----------------------
+        dt = glfwGetTime() - lastFrameTime;
+        lastFrameTime += dt;
+
+        // Process Input
+        // -------------
+        processInput(window);
+        
+        // Renderer Clear
+        // --------------
+        Renderer::clear(); // Clears color and depth buffers
+
+        // Activate Shader to draw with colors or textures
+        // -----------------------------------------------
+        float time = glfwGetTime();
+        vec3 center = vec3(0.0f, 5.0f, 0.0f);
+        float radius = 10.0f;
+        vec3 lightPos1 = getLightPos(0.0f, time);
+        vec3 lightPos2 = getLightPos(3.14f, time);
+
+        lightingShaderProgram.use();
+        Renderer::setViewMatrix(lightingShaderProgram.getID(), camera.getViewMatrix());
+
+        // Set lighting uniforms
+        lightingShaderProgram.setVec3("lightPos1", lightPos1);
+        lightingShaderProgram.setVec3("lightPos2", lightPos2);
+        lightingShaderProgram.setVec3("viewPos", camera.getPosition());
+        
+        // Render the scene
+        // ----------------
+        renderScene(lightingShaderProgram, towerList, lightCubeVAO, roadTextureID, buildingTextureID);
+        // Render the light cubes
+        // ----------------------
+        renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, lampTextureID);
+        // Render the projectiles
+        // ----------------------
+        renderProjectiles(lightingShaderProgram, laserTextureID);
+        // Render the avatar
+        // -----------------
+        renderAvatar(lightingShaderProgram);
+
+        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+        // -------------------------------------------------------------------------------
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+        
+        //  Update camera horizontal and vertical angle
+        // ---------------------------------------------
+        double mousePosX, mousePosY;
+        glfwGetCursorPos(window, &mousePosX, &mousePosY);
+        camera.updateOrientation(mousePosX, mousePosY, dt);
+
+
+    }
+
+    // glfw: terminate, clearing all previously allocated GLFW resources.
+    // ------------------------------------------------------------------
+    glfwTerminate();
+    return 0;
+}
+
+// ----------------------------------------------------------------------------------------------------------------------------------------------
+//                                                       DEFINE METHODS AND UTILITIES
+// ----------------------------------------------------------------------------------------------------------------------------------------------
+
+// Process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
+{
+    // Exit the appplication
+    // ---------------------
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true); 
+    // Toggle between camera modes
+    // ---------------------------
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+        cameraFirstPerson = true;
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+        cameraFirstPerson = false;
+    // Use camera lookat and side vectors to update positions with ASDW + SHIFT
+    // ------------------------------------------------------------------------
+    camera.processInput(window);
+}
+
+// Draw the scene, ground, buildings and so on
+// -------------------------------------------
+void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint groundTex, GLuint buildingTex) {
+    mat4 identity = mat4(1.0f);
+
+    mat4 groundMatrix = glm::scale(glm::translate(identity, vec3(0.0f, -1.0f, 0.0f)), vec3(100.0f, 0.1f, 100.0f));
+    shader.use();
+    Renderer::bindTexture(shader.getID(), groundTex, "textureSampler", ROAD_TEX_SLOT);
+    Renderer::setWorldMatrix(shader.getID(), groundMatrix);
+    glBindVertexArray(vao);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    Renderer::bindTexture(shader.getID(), buildingTex, "textureSampler", BUILDING_TEX_SLOT);
+    for (const auto& tower : towers) {
+        mat4 model = glm::scale(glm::translate(identity, tower.position), vec3(2.0f, tower.height, 2.0f));
+        Renderer::setWorldMatrix(shader.getID(), model);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+}
+
+// Draw orbiting light cubes in the scene
+// --------------------------------------
+void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex) {
+    mat4 identity = mat4(1.0f);
+    shader.use();
+    Renderer::bindTexture(shader.getID(), tex, "textureSampler", LAMP_TEX_SLOT);
+
+    auto drawCube = [&](const vec3& pos) {
+        mat4 model = glm::scale(glm::translate(identity, pos), vec3(0.5f));
+        shader.setMat4("worldMatrix", model);
+        glBindVertexArray(vao);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    };
+    drawCube(pos1);
+    drawCube(pos2);
+}
+
+// Draw Projectiles as they are shot
+// ---------------------------------
+void renderProjectiles(Shader& shader, GLuint tex){
+    shader.use();
+    Renderer::bindTexture(shader.getID(), tex, "textureSampler", LASER_TEX_SLOT);
+    // Update and draw projectiles
+    for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
+    {
+        it->Update(dt);
+        it->Draw();
+    }
+
+    // Shoot projectiles on mouse left click
+    if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        const float projectileSpeed = 25.0f;
+        vec3 direction = normalize(camera.getlookAt());
+        vec3 velocity = direction * projectileSpeed;
+        vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
+        
+        projectileList.push_back(Projectile(spawnPosition,velocity ,  shader.getID()));
+    }
+    lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+}
+
+// Draw avatar in 1st or 3rd person
+// --------------------------------
+void renderAvatar(Shader& shader){
+        spinningCubeAngle += 180.0f * dt;
+        // Draw avatar in view space for first person camera
+        // and in world space for third person camera
+        if (cameraFirstPerson){
+            mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
+                                          rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                          scale(mat4(1.0f), vec3(0.05f));
+            
+            Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
+            Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
+        }
+        else{
+            vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
+            vec3 avatarPosition = camera.getPosition() + avatarOffset;
+
+            mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
+                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                           scale(mat4(1.0f), vec3(0.3f));
+            
+            Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
+        }
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        // Set the view matrix for first and third person cameras
+        // - In first person, camera lookat is set like below
+        // - In third person, camera position is on a sphere looking towards center
+        mat4 viewMatrix(1.0f);
+        
+        if (cameraFirstPerson){
+            viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
+        }
+        else{
+            // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
+            float radius = 5.0f;
+            vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
+                                                  radius * sinf(camera.getPhi()),
+                                                  -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
+            viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
+        }
+        Renderer::setViewMatrix(shader.getID(), viewMatrix);
+}
+
+
+// Initialize the libraries and window
+// -----------------------------------
+bool InitContext() {
     glfwInit();
     
     #if defined(PLATFORM_OSX)
@@ -239,477 +346,33 @@ int main(int argc, char*argv[])
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     #else
         // On windows, we set OpenGL version to 2.1, to support more hardware
+        // ------------------------------------------------------------------
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     #endif
 
     // Create Window and rendering context using GLFW, resolution is 800x600
-    GLFWwindow* window = glfwCreateWindow(800, 600, "Comp371 - Lab 04", NULL, NULL);
+    // ------------------------------------------------------------------
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Comp 371 - Project", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
         glfwTerminate();
         return -1;
     }
-    glfwMakeContextCurrent(window);
+    // Tell GLFW to capture mouse movement
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
+    glfwMakeContextCurrent(window);
+    glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 
-    
     // Initialize GLEW
+    // ---------------
     glewExperimental = true; // Needed for core profile
     if (glewInit() != GLEW_OK) {
         std::cerr << "Failed to create GLEW" << std::endl;
         glfwTerminate();
         return -1;
     }
-
-    // Load Textures
-    GLuint brickTextureID = loadTexture("Textures/building.jpg");
-    GLuint cementTextureID = loadTexture("Textures/road.jpg");
-    
-    // Black background
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    
-    // Compile and link shaders here ...
-    string vertexSource = readShaderFile("Shaders/VertexShader.glsl");
-    string fragmentSource = readShaderFile("Shaders/FragmentShader.glsl");
-
-    string texturedVertex = readShaderFile("Shaders/TexturedVertex.glsl");
-    string texturedFragment = readShaderFile("Shaders/TexturedFragment.glsl");
-
-    string lightVertex = readShaderFile("Shaders/LightCubeVertex.glsl");
-    string lightFragment = readShaderFile("Shaders/LightCubeFragment.glsl");
-
-    int colorShaderProgram = compileAndLinkShaders(vertexSource.c_str(), fragmentSource.c_str());
-    int texturedShaderProgram = compileAndLinkShaders(texturedVertex.c_str(), texturedFragment.c_str());
-    int lightCubeShaderProgram = compileAndLinkShaders(lightVertex.c_str(), lightFragment.c_str());
-    
-    // Camera parameters for view transform
-    vec3 cameraPosition(0.6f,1.0f,10.0f);
-    vec3 cameraLookAt(0.0f, 0.0f, -1.0f);
-    vec3 cameraUp(0.0f, 1.0f, 0.0f);
-    
-    // Other camera parameters
-    float cameraSpeed = 1.0f;
-    float cameraFastSpeed = 2 * cameraSpeed;
-    float cameraHorizontalAngle = 90.0f;
-    float cameraVerticalAngle = 0.0f;
-    bool  cameraFirstPerson = true; // press 1 or 2 to toggle this variable
-
-    // Spinning cube at camera position
-    float spinningCubeAngle = 0.0f;
-    
-    // Set projection matrix for shader, this won't change
-    mat4 projectionMatrix = glm::perspective(70.0f,            // field of view in degrees
-                                             800.0f / 600.0f,  // aspect ratio
-                                             0.01f, 300.0f);   // near and far (near > 0)
-    
-    // Set initial view matrix
-    mat4 viewMatrix = lookAt(cameraPosition,  // eye
-                             cameraPosition + cameraLookAt,  // center
-                             cameraUp ); // up
-    
-    // Set View and Projection matrices on both shaders
-    setViewMatrix(colorShaderProgram, viewMatrix);
-    setViewMatrix(texturedShaderProgram, viewMatrix);
-
-    setProjectionMatrix(colorShaderProgram, projectionMatrix);
-    setProjectionMatrix(texturedShaderProgram, projectionMatrix);
-
-    // Define and upload geometry to the GPU here ...
-    texturedCubeVAO = createTexturedCubeVertexArrayObject();
-
-    // For frame time
-    float lastFrameTime = glfwGetTime();
-    int lastMouseLeftState = GLFW_RELEASE;
-    double lastMousePosX, lastMousePosY;
-    glfwGetCursorPos(window, &lastMousePosX, &lastMousePosY);
-    
-    // Other OpenGL states to set once
-    // Enable Backface culling
-    glEnable(GL_CULL_FACE);
-    glEnable(GL_DEPTH_TEST);
-    
-    // Container for projectiles to be implemented in tutorial
-    list<Projectile> projectileList;
-
-    glBindVertexArray(texturedCubeVAO);
-    
-    // Set up of light cubes
-    vec3 orbitCenter = vec3(0.0f, 0.0f, 0.0f); // Point around which cubes orbit
-
-    LightCube lightCube1(vec3(0.0f), 10.0f, 1.5f, 5.0f, vec3(1.0f), lightCubeShaderProgram);
-    LightCube lightCube2(vec3(0.0f), 10.0f, 1.5f, 5.0f, vec3(1.0f), lightCubeShaderProgram);
-
-    // Entering Main Loop
-    while(!glfwWindowShouldClose(window))
-    {
-        // Frame time calculation
-        float dt = glfwGetTime() - lastFrameTime;
-        lastFrameTime += dt;
-
-        // Each frame, reset color of each pixel to glClearColor
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        // === 1. UPDATE LIGHT CUBE POSITIONS ===
-        lightCube1.Update(dt, cameraPosition, 0.0f);
-        lightCube2.Update(dt, cameraPosition, glm::pi<float>());
-
-        // === 2. SEND LIGHT UNIFORMS TO TEXTURED SHADER ===
-        glUseProgram(texturedShaderProgram);
-        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos1"), 1, glm::value_ptr(lightCube1.GetPosition()));
-        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightPos2"), 1, glm::value_ptr(lightCube2.GetPosition()));
-        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightColor1"), 1, glm::value_ptr(glm::vec3(1.0f)));
-        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "lightColor2"), 1, glm::value_ptr(glm::vec3(1.0f)));
-        glUniform3fv(glGetUniformLocation(texturedShaderProgram, "viewPos"), 1, glm::value_ptr(cameraPosition));
-
-        // === 3. SEND MATRICES TO TEXTURED SHADER ===
-        glUniformMatrix4fv(glGetUniformLocation(texturedShaderProgram, "viewMatrix"), 1, GL_FALSE, glm::value_ptr(viewMatrix));
-        glUniformMatrix4fv(glGetUniformLocation(texturedShaderProgram, "projectionMatrix"), 1, GL_FALSE, glm::value_ptr(projectionMatrix));
-
-        glActiveTexture(GL_TEXTURE0);
-        GLuint textureLocation = glGetUniformLocation(texturedShaderProgram, "textureSampler");
-        glBindTexture(GL_TEXTURE_2D, brickTextureID);
-        glUniform1i(textureLocation, 0);                // Set our Texture sampler to user Texture Unit 0
-        
-        // Draw ground
-        mat4 groundWorldMatrix = translate(mat4(1.0f), vec3(0.0f, -0.01f, 0.0f)) * scale(mat4(1.0f), vec3(1000.0f, 0.02f, 1000.0f));
-        setWorldMatrix(texturedShaderProgram, groundWorldMatrix);
-        
-        glDrawArrays(GL_TRIANGLES, 0, 36); // 36 vertices, starting at index 0
-        
-        // Draw pillars
-        glBindTexture(GL_TEXTURE_2D, cementTextureID);
-        mat4 pillarWorldMatrix = translate(mat4(1.0f), vec3(0.0f, 10.0f, 0.0f)) * scale(mat4(1.0f), vec3(2.0f, 20.0f, 2.0f));
-        setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
-        
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-        
-        for (int i=0; i<20; ++i)
-        {
-            for (int j=0; j<20; ++j)
-            {
-                // FIXME: it would be more efficient to set the cement texture and draw all pillars, then switch to brick texture and draw all pillar bases
-                // use cement texture for pillar
-                glBindTexture(GL_TEXTURE_2D, cementTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 5.0f, -100.0f + j * 10.0f)) * scale(mat4(1.0f), vec3(1.0f, 10.0f, 1.0f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-                
-                // use brick texture for base
-                glBindTexture(GL_TEXTURE_2D, brickTextureID);
-                pillarWorldMatrix = translate(mat4(1.0f), vec3(- 100.0f + i * 10.0f, 0.55f, -100.0f + j * 10.0f)) * rotate(mat4(1.0f), radians(180.0f), vec3(0.0f, 1.0f, 0.0f)) * scale(mat4(1.0f), vec3(1.1f, 1.1f, 1.1f));
-                setWorldMatrix(texturedShaderProgram, pillarWorldMatrix);
-                glDrawArrays(GL_TRIANGLES, 0, 36);
-            }
-        }
-        
-        // Draw colored geometry
-        glUseProgram(colorShaderProgram);
-
-        // Update and draw projectiles
-        for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
-        {
-            it->Update(dt);
-            it->Draw();
-        }
-        
-        // Spinning cube at camera position
-        spinningCubeAngle += 180.0f * dt;
-        
-        // Draw avatar in view space for first person camera
-        // and in world space for third person camera
-        if (cameraFirstPerson)
-        {
-            // Wolrd matrix is identity, but view transform like a world transform relative to camera basis
-            // (1 unit in front of camera)
-            //
-            // This is similar to a weapon moving with camera in a shooter game
-            mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.0f)) *
-                                          rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                          scale(mat4(1.0f), vec3(0.01f, 0.01f, 0.01f));
-            
-            setWorldMatrix(colorShaderProgram, mat4(1.0f));
-            setViewMatrix(colorShaderProgram, spinningCubeViewMatrix);
-        }
-        else
-        {
-            // In third person view, let's draw the spinning cube in world space, like any other models
-            mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), cameraPosition) *
-                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                           scale(mat4(1.0f), vec3(0.1f, 0.1f, 0.1f));
-            
-            setWorldMatrix(colorShaderProgram, spinningCubeWorldMatrix);
-        }
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        glBindTexture(GL_TEXTURE_2D, 0); // Make sure no texture is bound
-
-        // Use the light cube shader
-        glUseProgram(lightCubeShaderProgram);
-
-        // Set the light color once
-        glm::vec3 lightColor(1.0f, 0.9f, 0.6f);
-        GLuint lightColorLoc = glGetUniformLocation(lightCubeShaderProgram, "lightColor");
-        glUniform3fv(lightColorLoc, 1, glm::value_ptr(lightColor));
-        
-
-        // === 5. SET VIEW/PROJECTION FOR LIGHT CUBES ===
-        lightCube1.SetViewProjection(viewMatrix, projectionMatrix);
-        lightCube2.SetViewProjection(viewMatrix, projectionMatrix);
-        
-        // === 6. DRAW LIGHT CUBES ===
-        lightCube1.Draw();
-        lightCube2.Draw();
-        
-        // End Frame
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-        
-        // Handle inputs
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, true);
-        
-        if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) // move camera down
-        {
-            cameraFirstPerson = true;
-        }
-
-        if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) // move camera down
-        {
-            cameraFirstPerson = false;
-        }
-
-        
-        // This was solution for Lab02 - Moving camera exercise
-        // We'll change this to be a first or third person camera
-        bool fastCam = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS || glfwGetKey(window, GLFW_KEY_RIGHT_SHIFT) == GLFW_PRESS;
-        float currentCameraSpeed = (fastCam) ? cameraFastSpeed : cameraSpeed;
-        
-        
-        // - Calculate mouse motion dx and dy
-        // - Update camera horizontal and vertical angle
-        double mousePosX, mousePosY;
-        glfwGetCursorPos(window, &mousePosX, &mousePosY);
-        
-        double dx = mousePosX - lastMousePosX;
-        double dy = mousePosY - lastMousePosY;
-        
-        lastMousePosX = mousePosX;
-        lastMousePosY = mousePosY;
-
-        // Convert to spherical coordinates
-        const float cameraAngularSpeed = 60.0f;
-        cameraHorizontalAngle -= dx * cameraAngularSpeed * dt;
-        cameraVerticalAngle   -= dy * cameraAngularSpeed * dt;
-        
-        // Clamp vertical angle to [-85, 85] degrees
-        cameraVerticalAngle = std::max(-85.0f, std::min(85.0f, cameraVerticalAngle));
-        
-        float theta = radians(cameraHorizontalAngle);
-        float phi = radians(cameraVerticalAngle);
-        
-        cameraLookAt = vec3(cosf(phi)*cosf(theta), sinf(phi), -cosf(phi)*sinf(theta));
-        vec3 cameraSideVector = glm::cross(cameraLookAt, vec3(0.0f, 1.0f, 0.0f));
-        
-        glm::normalize(cameraSideVector);
-        
-        
-        // Use camera lookat and side vectors to update positions with ASDW
-        if (glfwGetKey(window, GLFW_KEY_W ) == GLFW_PRESS)
-        {
-            cameraPosition += cameraLookAt * dt * currentCameraSpeed;
-        }
-        
-        if (glfwGetKey(window, GLFW_KEY_S ) == GLFW_PRESS)
-        {
-            cameraPosition -= cameraLookAt * dt * currentCameraSpeed;
-        }
-        
-        if (glfwGetKey(window, GLFW_KEY_D ) == GLFW_PRESS)
-        {
-            cameraPosition += cameraSideVector * dt * currentCameraSpeed;
-        }
-        
-        if (glfwGetKey(window, GLFW_KEY_A ) == GLFW_PRESS)
-        {
-            cameraPosition -= cameraSideVector * dt * currentCameraSpeed;
-        }
-        
-        // Set the view matrix for first and third person cameras
-        // - In first person, camera lookat is set like below
-        // - In third person, camera position is on a sphere looking towards center
-        mat4 viewMatrix(1.0f);
-        
-        if (cameraFirstPerson)
-        {
-            viewMatrix = lookAt(cameraPosition, cameraPosition + cameraLookAt, cameraUp );
-        }
-        else
-        {
-            // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
-            float radius = 5.0f;
-            vec3 position = cameraPosition - vec3(radius * cosf(phi)*cosf(theta),
-                                                  radius * sinf(phi),
-                                                  -radius * cosf(phi)*sinf(theta));
-;
-            viewMatrix = lookAt(position, cameraPosition, cameraUp);
-        }
-        
-        setViewMatrix(colorShaderProgram, viewMatrix);
-        setViewMatrix(texturedShaderProgram, viewMatrix);
-
-        
-        // Shoot projectiles on mouse left click
-        // To detect onPress events, we need to check the last state and the current state to detect the state change
-        // Otherwise, you would shoot many projectiles on each mouse press
-        if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-        {
-            const float projectileSpeed = 25.0f;
-            projectileList.push_back(Projectile(cameraPosition, projectileSpeed * cameraLookAt, colorShaderProgram));
-        }
-        lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-    }
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    
-	return 0;
-}
-
-int compileAndLinkShaders(const char* vertexShaderSource, const char* fragmentShaderSource)
-{
-    // compile and link shader program
-    // return shader program id
-    // ------------------------------------
-
-    // vertex shader
-    int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-    glCompileShader(vertexShader);
-    
-    // check for shader compile errors
-    int success;
-    char infoLog[512];
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-        std::cerr << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    
-    // fragment shader
-    int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-    glCompileShader(fragmentShader);
-    
-    // check for shader compile errors
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-    if (!success)
-    {
-        glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-        std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-    }
-    
-    // link shaders
-    int shaderProgram = glCreateProgram();
-    glAttachShader(shaderProgram, vertexShader);
-    glAttachShader(shaderProgram, fragmentShader);
-    glLinkProgram(shaderProgram);
-    
-    // check for linking errors
-    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-    if (!success) {
-        glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-        std::cerr << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-    }
-    
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    
-    return shaderProgram;
-}
-
-GLuint loadTexture(const char *filename)
-{
-    // Step1 Load Textures with dimension data
-    int width, height, nrChannels;
-    unsigned char *data = stbi_load(filename, &width, &height, &nrChannels, 0);
-    if (!data)
-    {
-        std::cerr << "Error::Texture could not load texture file: " << filename << std::endl;
-        return 0;
-    }
-
-    // Step2 Create and bind textures
-    GLuint textureId = 0;
-    glGenTextures(1, &textureId);
-    assert(textureId != 0);
-
-    glBindTexture(GL_TEXTURE_2D, textureId);
-
-    // Step3 Set filter parameters
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-    // Step4 Upload the texture to the PU
-    GLenum format = 0;
-    if (nrChannels == 1)
-        format = GL_RED;
-    else if (nrChannels == 3)
-        format = GL_RGB;
-    else if (nrChannels == 4)
-        format = GL_RGBA;
-
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height,
-                 0, format, GL_UNSIGNED_BYTE, data);
-
-    // Step5 Free resources
-    stbi_image_free(data);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    return textureId;
-}
-
-int createTexturedCubeVertexArrayObject()
-{
-    // Create a vertex array
-    GLuint vertexArrayObject;
-    glGenVertexArrays(1, &vertexArrayObject);
-    glBindVertexArray(vertexArrayObject);
-    
-    // Upload Vertex Buffer to the GPU, keep a reference to it (vertexBufferObject)
-    GLuint vertexBufferObject;
-    glGenBuffers(1, &vertexBufferObject);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(texturedCubeVertexArray), texturedCubeVertexArray, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0,                   // attribute 0 matches aPos in Vertex Shader
-                          3,                   // size
-                          GL_FLOAT,            // type
-                          GL_FALSE,            // normalized?
-                          sizeof(TexturedColoredVertex), // stride - each vertex contain 2 vec3 (position, color)
-                          (void*)0             // array buffer offset
-                          );
-    glEnableVertexAttribArray(0);
-    
-    
-    glVertexAttribPointer(1,                            // attribute 1 matches aColor in Vertex Shader
-                          3,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          sizeof(TexturedColoredVertex),
-                          (void*)sizeof(vec3)      // color is offseted a vec3 (comes after position)
-                          );
-    glEnableVertexAttribArray(1);
-    
-    glVertexAttribPointer(2,                            // attribute 2 matches aUV in Vertex Shader
-                          2,
-                          GL_FLOAT,
-                          GL_FALSE,
-                          sizeof(TexturedColoredVertex),
-                          (void*)(2*sizeof(vec3))      // uv is offseted by 2 vec3 (comes after position and color)
-                          );
-    glEnableVertexAttribArray(2);
-    
-    return vertexArrayObject;
+    cout << "INITIALIZING WINDOW: SUCCESS" << endl;
+    return true;
 }
