@@ -1,4 +1,4 @@
-# Final Project for CCOMP371 - Computer Graphics
+# Final Project for COMP371 - Computer Graphics
 
 __**Game**__ <br>
 Shoot the monsters and save the town from danger!
