@@ -47,8 +47,7 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "cinttypes": "cpp",
-        "typeinfo": "cpp"
-        "algorithm": "cpp",
-        "fstream": "cpp"
+        "typeinfo": "cpp",
+        "algorithm": "cpp"
     }
 }
