@@ -13,3 +13,11 @@ W A S D + Left Click to shoot
 
 **Command to run with g++:** <br>
 Just set the compiler to g++ in vs code and run it.
+
+**File Structure** <br>
+Geometry: upload and transform into VAO objects, cubes, triangles
+Shader: load and compile shaders + pass uniforms to shaders
+Renderer: set transformations matrices + bind textures
+Camera: Handle camera movement calculations and inputs
+Texture: Loads textures from an image
+Projectile: Handles the class projectile + update + draw and everything related to it
