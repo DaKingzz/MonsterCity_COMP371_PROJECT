@@ -15,9 +15,9 @@ W A S D + Left Click to shoot
 Just set the compiler to g++ in vs code and run it.
 
 **File Structure** <br>
-Geometry: upload and transform into VAO objects, cubes, triangles
-Shader: load and compile shaders + pass uniforms to shaders
-Renderer: set transformations matrices + bind textures
-Camera: Handle camera movement calculations and inputs
-Texture: Loads textures from an image
-Projectile: Handles the class projectile + update + draw and everything related to it
+Geometry: upload and transform into VAO objects, cubes, triangles <br>
+Shader: load and compile shaders + pass uniforms to shaders <br>
+Renderer: set transformations matrices + bind textures <br>
+Camera: Handle camera movement calculations and inputs <br>
+Texture: Loads textures from an image <br>
+Projectile: Handles the class projectile + update + draw and everything related to it <br>
