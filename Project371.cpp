@@ -32,7 +32,7 @@ struct Tower {
 
 // Texture Index
 // -------------
-constexpr int ROAD_TEX_SLOT = 0;
+constexpr int GRASS_TEX_SLOT = 0;
 constexpr int BUILDING_TEX_SLOT = 1;
 constexpr int LAMP_TEX_SLOT = 2;
 constexpr int LASER_TEX_SLOT = 3;
@@ -56,7 +56,7 @@ void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint
 void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex);
 void renderProjectiles(Shader& shader, GLuint tex);
 void renderAvatar(Shader& shader);
-void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex);
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2);
 
 // Screen Settings
 // ---------------
@@ -170,7 +170,6 @@ GLuint setupModelEBO(string path, int& vertexCount)
 	return VAO;
 }
 
-
 // Main Function
 // -------------
 int main(){
@@ -187,11 +186,11 @@ int main(){
 
     // Load and Create Textures
     // ------------------------
-    GLuint roadTextureID = Texture::load("Textures/road.jpg");
+    GLuint grassTextureID = Texture::load("Textures/grass.jpg");
     GLuint buildingTextureID = Texture::load("Textures/building.jpg");
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
-    GLuint monsterTextureID = Texture::load("Textures/stone.png");
+    GLuint monsterTextureID = Texture::load("Textures/sand.jpg");
 
     // Build and Compile and Link Shaders
     // ----------------------------------
@@ -281,7 +280,7 @@ int main(){
         
         // Render the scene
         // ----------------
-        renderScene(lightingShaderProgram, towerList, lightCubeVAO, roadTextureID, buildingTextureID);
+        renderScene(lightingShaderProgram, towerList, lightCubeVAO, grassTextureID, buildingTextureID);
         // Render the light cubes
         // ----------------------
         renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, lampTextureID);
@@ -293,7 +292,7 @@ int main(){
         renderAvatar(lightingShaderProgram);
         // Render the monster using a model
         // --------------------------------
-        renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID);
+        renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID, lightPos1, lightPos2);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -343,7 +342,7 @@ void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint
 
     mat4 groundMatrix = glm::scale(glm::translate(identity, vec3(0.0f, -1.0f, 0.0f)), vec3(100.0f, 0.1f, 100.0f));
     shader.use();
-    Renderer::bindTexture(shader.getID(), groundTex, "textureSampler", ROAD_TEX_SLOT);
+    Renderer::bindTexture(shader.getID(), groundTex, "textureSampler", GRASS_TEX_SLOT);
     Renderer::setWorldMatrix(shader.getID(), groundMatrix);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -445,8 +444,12 @@ void renderAvatar(Shader& shader){
 
 // Render monster using an OBJ model
 // ---------------------------------
-void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex){
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2){
     shader.use();
+
+    shader.setVec3("lightPos1", lightPos1);
+    shader.setVec3("lightPos2", lightPos2);
+    shader.setVec3("viewPos", camera.getPosition());
 
     // Move the model within the world
     // -------------------------------
@@ -455,8 +458,7 @@ void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint te
     Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
 
     Renderer::setViewMatrix(shader.getID(), camera.getViewMatrix());
-    // Shaders dont support texture yet
-    //Renderer::bindTexture(monsterShaderProgram.getID(), monsterTextureID, "textureSampler", MONSTER_TEX_SLOT);
+    Renderer::bindTexture(shader.getID(), tex, "textureSampler", MONSTER_TEX_SLOT);
 
     //Draw the stored vertex objects
     glBindVertexArray(stoneVAO);
