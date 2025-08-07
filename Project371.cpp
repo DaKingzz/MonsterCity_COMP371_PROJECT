@@ -36,6 +36,7 @@ constexpr int ROAD_TEX_SLOT = 0;
 constexpr int BUILDING_TEX_SLOT = 1;
 constexpr int LAMP_TEX_SLOT = 2;
 constexpr int LASER_TEX_SLOT = 3;
+constexpr int MONSTER_TEX_SLOT = 4;
 
 // Variables to call and define later
 // ----------------------------------
@@ -73,6 +74,102 @@ float lastFrameTime;
 int lastMouseLeftState;
 double lastMousePosX, lastMousePosY;
 
+
+GLuint setupModelVBO(string path, int& vertexCount) {
+	std::vector<glm::vec3> vertices;
+	std::vector<glm::vec3> normals;
+	std::vector<glm::vec2> UVs;
+	
+	//read the vertex data from the model's OBJ file
+	loadOBJ(path.c_str(), vertices, normals, UVs);
+
+	GLuint VAO;
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO); //Becomes active VAO
+	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
+
+	//Vertex VBO setup
+	GLuint vertices_VBO;
+	glGenBuffers(1, &vertices_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(0);
+
+	//Normals VBO setup
+	GLuint normals_VBO;
+	glGenBuffers(1, &normals_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
+	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(1);
+
+	//UVs VBO setup
+	GLuint uvs_VBO;
+	glGenBuffers(1, &uvs_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
+	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(2);
+
+	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs, as we are using multiple VAOs)
+	vertexCount = vertices.size();
+	return VAO;
+}
+
+//Sets up a model using an Element Buffer Object to refer to vertex data
+GLuint setupModelEBO(string path, int& vertexCount)
+{
+	vector<int> vertexIndices; //The contiguous sets of three indices of vertices, normals and UVs, used to make a triangle
+	vector<glm::vec3> vertices;
+	vector<glm::vec3> normals;
+	vector<glm::vec2> UVs;
+
+	//read the vertices from the cube.obj file
+	//We won't be needing the normals or UVs for this program
+	loadOBJ2(path.c_str(), vertexIndices, vertices, normals, UVs);
+
+	GLuint VAO;
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO); //Becomes active VAO
+	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
+
+	//Vertex VBO setup
+	GLuint vertices_VBO;
+	glGenBuffers(1, &vertices_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(0);
+
+	//Normals VBO setup
+	GLuint normals_VBO;
+	glGenBuffers(1, &normals_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
+	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(1);
+
+	//UVs VBO setup
+	GLuint uvs_VBO;
+	glGenBuffers(1, &uvs_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
+	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(2);
+
+	//EBO setup
+	GLuint EBO;
+	glGenBuffers(1, &EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexIndices.size() * sizeof(int), &vertexIndices.front(), GL_STATIC_DRAW);
+
+	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs), remember: do NOT unbind the EBO, keep it bound to this VAO
+	vertexCount = vertexIndices.size();
+	return VAO;
+}
+
+
 // Main Function
 // -------------
 int main(){
@@ -93,10 +190,12 @@ int main(){
     GLuint buildingTextureID = Texture::load("Textures/building.jpg");
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
+    GLuint monsterTextureID = Texture::load("Textures/monster.png");
 
     // Build and Compile and Link Shaders
     // ----------------------------------
     Shader lightingShaderProgram("Shaders/Phong.vert", "Shaders/Phong.frag");
+    Shader monsterShaderProgram("Shaders/Monster.vert","Shaders/Monster.frag");
     lightCubeShader = &lightingShaderProgram;
 
     // Manage Building Postions Generation
@@ -115,12 +214,18 @@ int main(){
 
     // Set up Models
     // -------------
+    string monsterPath = "Models/Stone.obj";
+    int stoneVertices;
+
+    GLuint stoneVAO = setupModelEBO(monsterPath, stoneVertices);
 
     // Set initial transformation matrices to shaders
     mat4 projectionMatrix = glm::perspective(radians(70.0f), SCR_WIDTH * 1.0f / SCR_HEIGHT, 0.03f, 800.0f);
     Renderer::setProjectionMatrix(lightingShaderProgram.getID(), projectionMatrix);
+    Renderer::setProjectionMatrix(monsterShaderProgram.getID(), projectionMatrix);
     mat4 identity = mat4(1.0f);
     Renderer::setWorldMatrix(lightingShaderProgram.getID(), identity);
+    Renderer::setWorldMatrix(monsterShaderProgram.getID(), identity);
 
     // Set up Vertex Data (buffers)
     // ----------------------------
@@ -184,6 +289,25 @@ int main(){
         // Render the avatar
         // -----------------
         renderAvatar(lightingShaderProgram);
+        // Render the monster
+        // ------------------
+        monsterShaderProgram.use();
+
+        mat4 monsterModelMatrix = glm::translate(mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) *
+                                glm::scale(mat4(1.0f), glm::vec3(0.5f)); // scale down
+
+        Renderer::setWorldMatrix(monsterShaderProgram.getID(), monsterModelMatrix);
+
+
+        Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
+        // Shaders dont support texture yet
+        //Renderer::bindTexture(monsterShaderProgram.getID(), monsterTextureID, "textureSampler", MONSTER_TEX_SLOT);
+
+        //Draw the stored vertex objects
+		glBindVertexArray(stoneVAO);
+		//TODO3 Draw model as elements, instead of as arrays
+		glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
+        glBindVertexArray(0);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
