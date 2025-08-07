@@ -305,8 +305,6 @@ int main(){
         double mousePosX, mousePosY;
         glfwGetCursorPos(window, &mousePosX, &mousePosY);
         camera.updateOrientation(mousePosX, mousePosY, dt);
-
-
     }
 
     // glfw: terminate, clearing all previously allocated GLFW resources.
@@ -445,14 +443,16 @@ void renderAvatar(Shader& shader){
         Renderer::setViewMatrix(shader.getID(), viewMatrix);
 }
 
+// Render monster using an OBJ model
+// ---------------------------------
 void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex){
     shader.use();
 
+    // Move the model within the world
+    // -------------------------------
     mat4 monsterModelMatrix = glm::translate(mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) *
                             glm::scale(mat4(1.0f), glm::vec3(0.5f)); // scale down
-
     Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
-
 
     Renderer::setViewMatrix(shader.getID(), camera.getViewMatrix());
     // Shaders dont support texture yet
