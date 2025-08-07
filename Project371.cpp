@@ -56,6 +56,7 @@ void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint
 void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex);
 void renderProjectiles(Shader& shader, GLuint tex);
 void renderAvatar(Shader& shader);
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex);
 
 // Screen Settings
 // ---------------
@@ -220,6 +221,7 @@ int main(){
     GLuint stoneVAO = setupModelVBO(monsterPath, stoneVertices);
 
     // Set initial transformation matrices to shaders
+    // ----------------------------------------------
     mat4 projectionMatrix = glm::perspective(radians(70.0f), SCR_WIDTH * 1.0f / SCR_HEIGHT, 0.03f, 800.0f);
     Renderer::setProjectionMatrix(lightingShaderProgram.getID(), projectionMatrix);
     Renderer::setProjectionMatrix(monsterShaderProgram.getID(), projectionMatrix);
@@ -289,25 +291,9 @@ int main(){
         // Render the avatar
         // -----------------
         renderAvatar(lightingShaderProgram);
-        // Render the monster
-        // ------------------
-        monsterShaderProgram.use();
-
-        mat4 monsterModelMatrix = glm::translate(mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) *
-                                glm::scale(mat4(1.0f), glm::vec3(0.5f)); // scale down
-
-        Renderer::setWorldMatrix(monsterShaderProgram.getID(), monsterModelMatrix);
-
-
-        Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
-        // Shaders dont support texture yet
-        //Renderer::bindTexture(monsterShaderProgram.getID(), monsterTextureID, "textureSampler", MONSTER_TEX_SLOT);
-
-        //Draw the stored vertex objects
-		glBindVertexArray(stoneVAO);
-		//TODO3 Draw model as elements, instead of as arrays
-		glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
-        glBindVertexArray(0);
+        // Render the monster using a model
+        // --------------------------------
+        renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
@@ -457,6 +443,26 @@ void renderAvatar(Shader& shader){
             viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
         }
         Renderer::setViewMatrix(shader.getID(), viewMatrix);
+}
+
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex){
+    shader.use();
+
+    mat4 monsterModelMatrix = glm::translate(mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) *
+                            glm::scale(mat4(1.0f), glm::vec3(0.5f)); // scale down
+
+    Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
+
+
+    Renderer::setViewMatrix(shader.getID(), camera.getViewMatrix());
+    // Shaders dont support texture yet
+    //Renderer::bindTexture(monsterShaderProgram.getID(), monsterTextureID, "textureSampler", MONSTER_TEX_SLOT);
+
+    //Draw the stored vertex objects
+    glBindVertexArray(stoneVAO);
+    //TODO3 Draw model as elements, instead of as arrays
+    glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
+    glBindVertexArray(0);
 }
 
 
