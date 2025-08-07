@@ -217,7 +217,7 @@ int main(){
     string monsterPath = "Models/Stone.obj";
     int stoneVertices;
 
-    GLuint stoneVAO = setupModelEBO(monsterPath, stoneVertices);
+    GLuint stoneVAO = setupModelVBO(monsterPath, stoneVertices);
 
     // Set initial transformation matrices to shaders
     mat4 projectionMatrix = glm::perspective(radians(70.0f), SCR_WIDTH * 1.0f / SCR_HEIGHT, 0.03f, 800.0f);
