@@ -45,7 +45,7 @@ public:
         }
         catch(std::ifstream::failure e)
         {
-            std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ" << std::endl;
+            std::cout << "ERROR::SHADER::FILE_NOT_SUCCESFULLY_READ at " << vertexPath << std::endl;
         }
         const char* vShaderCode = vertexCode.c_str();
         const char* fShaderCode = fragmentCode.c_str();
@@ -63,7 +63,7 @@ public:
         if(!success)
         {
             glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-            std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+            std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED in " << vertexPath << "\n" << infoLog << std::endl;
         };
 
         // Fragment Shader
@@ -75,7 +75,7 @@ public:
         if (!success)
         {
             glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-            std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+            std::cerr << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED in " << fragmentPath << "\n" << infoLog << std::endl;
         }
 
         // shader Program
@@ -94,6 +94,8 @@ public:
         // delete the shaders as they're linked into our program now and no longer necessary
         glDeleteShader(vertex);
         glDeleteShader(fragment);
+
+        std::cout << "SHADER CREATED FROM: " << vertexPath << " and " << fragmentPath << std::endl;
     }
 
     // Activate/Use Program

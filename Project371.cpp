@@ -191,7 +191,7 @@ int main(){
     GLuint buildingTextureID = Texture::load("Textures/building.jpg");
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
-    GLuint monsterTextureID = Texture::load("Textures/monster.png");
+    GLuint monsterTextureID = Texture::load("Textures/stone.png");
 
     // Build and Compile and Link Shaders
     // ----------------------------------
