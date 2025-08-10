@@ -48,6 +48,10 @@ GLuint lightCubeVAO;
 Shader* lightCubeShader;
 vector<Tower> towerList;
 list<Projectile> projectileList;
+glm::vec3 gMonsterPivotLocal;
+glm::vec3 gMonsterBoundsMin;
+glm::vec3 gMonsterBoundsMax;
+static float gAngle = 0.0f;
 
 // Methods to call and define later
 // --------------------------------
@@ -113,6 +117,14 @@ GLuint setupModelVBO(string path, int& vertexCount) {
 	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
 	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
 	glEnableVertexAttribArray(2);
+
+    // Pivot point calculation
+    glm::vec3 vmin(FLT_MAX), vmax(-FLT_MAX);
+    for (auto& v : vertices) { vmin = glm::min(vmin, v); vmax = glm::max(vmax, v); }
+    
+    gMonsterBoundsMin = vmin;
+    gMonsterBoundsMax = vmax;
+    gMonsterPivotLocal = 0.5f * (vmin + vmax);
 
 	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs, as we are using multiple VAOs)
 	vertexCount = vertices.size();
@@ -518,26 +530,43 @@ void renderAvatar(Shader& shader){
 
 // Render monster using an OBJ model
 // ---------------------------------
-void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2){
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex,
+                   glm::vec3 lightPos1, glm::vec3 lightPos2) {
+    // Monster position and scale
+    float s      = gMonsterScale;
+    float ymin   = gMonsterBoundsMin.y;
+    float yc     = gMonsterPivotLocal.y;
+    float groundY = 0.0f;
+
+    float worldY = groundY - (s * ymin + (1.0f - s) * yc);
+
+    glm::vec3 monsterWorldPos = glm::vec3(gMonsterPos.x, worldY, gMonsterPos.z);
     shader.use();
 
     shader.setVec3("lightPos1", lightPos1);
     shader.setVec3("lightPos2", lightPos2);
-    shader.setVec3("viewPos", camera.getPosition());
+    shader.setVec3("viewPos",  camera.getPosition());
 
-    // Position + scale the model
-    glm::mat4 monsterModelMatrix =
-        glm::translate(glm::mat4(1.0f), gMonsterPos) *
-        glm::scale(glm::mat4(1.0f), glm::vec3(gMonsterScale));
+    // Spin angle (degrees/sec -> radians)
+    float t = static_cast<float>(glfwGetTime());
+    gAngle = t * glm::radians(45.0f);  // spin 45°/sec
 
-    Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
-    Renderer::setViewMatrix(shader.getID(), camera.getViewMatrix());
+    // Local axis to spin around
+    glm::vec3 localAxis(1, 1, 1);
+
+    glm::mat4 M =
+        glm::translate(glm::mat4(1.0f), monsterWorldPos) *
+        glm::translate(glm::mat4(1.0f), gMonsterPivotLocal) *
+        glm::rotate   (glm::mat4(1.0f), gAngle, localAxis) *
+        glm::scale    (glm::mat4(1.0f), glm::vec3(gMonsterScale)) *
+        glm::translate(glm::mat4(1.0f), -gMonsterPivotLocal);
+
+    Renderer::setWorldMatrix(shader.getID(), M);
+    Renderer::setViewMatrix(shader.getID(),  camera.getViewMatrix());
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", MONSTER_TEX_SLOT);
 
-    //Draw the stored vertex objects
     glBindVertexArray(stoneVAO);
     glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
-    //TODO3 Draw model as elements, instead of as arrays
     glBindVertexArray(0);
 }
 
