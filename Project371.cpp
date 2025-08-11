@@ -331,70 +331,6 @@ int main(){
 //                                                       DEFINE METHODS AND UTILITIES
 // ----------------------------------------------------------------------------------------------------------------------------------------------
 
-// Process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
-// ---------------------------------------------------------------------------------------------------------
-void processInput(GLFWwindow *window)
-{
-    // Exit the appplication
-    // ---------------------
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true); 
-    // Toggle between camera modes
-    // ---------------------------
-    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
-        cameraFirstPerson = true;
-    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
-        cameraFirstPerson = false;
-
-//Random color chang of cubes
-//---------------------------------------
-if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && !kKeyPressed) {
-    kKeyPressed = true;
-
-
-                  flyingCubeColor = glm::vec3(
-    static_cast<float>(rand()) / RAND_MAX,  
-    static_cast<float>(rand()) / RAND_MAX,  
-    static_cast<float>(rand()) / RAND_MAX  
-                  );
-
-    switch (rand()%4)
-    {
-    case 0:
-    CURRENT_CUBE_TEX_SLOT = MESH_TEX_SLOT;
-   flyingCubeTextureID =MESH_TEX_SLOT +1;
-        break;
-
-     case 1:
-      CURRENT_CUBE_TEX_SLOT = JACK_O_LANTERN_TEX_SLOT;
-     flyingCubeTextureID =JACK_O_LANTERN_TEX_SLOT +1;
-        break;
-
-         case 2:
-      CURRENT_CUBE_TEX_SLOT = LAMP_TEX_SLOT;
-     flyingCubeTextureID =LAMP_TEX_SLOT +1;
-        break;
-
-         case 3:
-      CURRENT_CUBE_TEX_SLOT = GLOWSTONE_TEX_SLOT;
-     flyingCubeTextureID =GLOWSTONE_TEX_SLOT+1;
-        break;
-    
-    default:
-        break;
-    }
-
-  
-}
-if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
-    kKeyPressed = false;
-}
-
-    // Use camera lookat and side vectors to update positions with ASDW + SHIFT
-    // ------------------------------------------------------------------------
-    camera.processInput(window);
-}
-
 // Draw the scene, ground, buildings and so on
 // -------------------------------------------
 void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint groundTex, GLuint buildingTex) {
@@ -679,6 +615,43 @@ void processInput(GLFWwindow *window)
         cameraFirstPerson = true;
     if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
         cameraFirstPerson = false;
+
+        //Random color chang of cubes
+        //---------------------------------------
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && !kKeyPressed) {
+            kKeyPressed = true;
+            flyingCubeColor = glm::vec3(
+                static_cast<float>(rand()) / RAND_MAX,  
+                static_cast<float>(rand()) / RAND_MAX,  
+                static_cast<float>(rand()) / RAND_MAX);
+
+            switch (rand()%4){
+                case 0:
+                    CURRENT_CUBE_TEX_SLOT = MESH_TEX_SLOT;
+                    flyingCubeTextureID =MESH_TEX_SLOT +1;
+                break;
+
+                case 1:
+                    CURRENT_CUBE_TEX_SLOT = JACK_O_LANTERN_TEX_SLOT;
+                    flyingCubeTextureID =JACK_O_LANTERN_TEX_SLOT +1;
+                    break;
+
+                case 2:
+                    CURRENT_CUBE_TEX_SLOT = LAMP_TEX_SLOT;
+                    flyingCubeTextureID =LAMP_TEX_SLOT +1;
+                    break;
+                case 3:
+                    CURRENT_CUBE_TEX_SLOT = GLOWSTONE_TEX_SLOT;
+                    flyingCubeTextureID =GLOWSTONE_TEX_SLOT+1;
+                    break;
+            default:
+                break;
+            }
+        }
+        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
+            kKeyPressed = false;
+        }
+
     // Use camera lookat and side vectors to update positions with ASDW + SHIFT
     // ------------------------------------------------------------------------
     camera.processInput(window);
