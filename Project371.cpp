@@ -63,7 +63,6 @@ int flyingCubeTextureID;
 glm::vec3 flyingCubeColor(1.0f, 1.0f, 1.0f); // default white
 bool kKeyPressed = false; // to avoid multiple toggles per press
 
-
 // Variables to call and define later
 // ----------------------------------
 
@@ -137,9 +136,6 @@ int main(){
     CURRENT_CUBE_TEX_SLOT =LAMP_TEX_SLOT;
     
      flyingCubeTextureID =lampTextureID ; 
-    
-
-
 
     // Create Framebuffer for shawfow mapping
     // --------------------------------------
@@ -289,9 +285,9 @@ int main(){
         lightingShaderProgram.setVec3("viewPos", camera.getPosition());
         lightingShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
         
-        glActiveTexture(GL_TEXTURE5); // set to free unit
+        glActiveTexture(GL_TEXTURE8); // set to free unit
         glBindTexture(GL_TEXTURE_2D, depthMap);
-        lightingShaderProgram.setInt("shadowMap", 5);
+        lightingShaderProgram.setInt("shadowMap", 8);
 
         
         // Render the scene
@@ -310,7 +306,7 @@ int main(){
         // --------------------------------
         Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
         monsterShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-        monsterShaderProgram.setInt("shadowMap", 5);
+        monsterShaderProgram.setInt("shadowMap", 8);
         renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID, lightPos1, lightPos2);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
