@@ -7,8 +7,6 @@ in vec4 FragPosLightSpace;
 uniform vec3 viewPos;
 uniform vec3 lightPos1;
 uniform vec3 lightPos2;
-uniform vec3 overrideColor;
-uniform float overrideAmount;
 uniform sampler2D shadowMap;
 uniform sampler2D textureSampler;
 
@@ -60,18 +58,20 @@ vec3 CalcLight(vec3 lightPos)
     float diff = max(dot(n, L), 0.0);
     vec3 diffuse  = diff * lightCol;
 
-    vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = spec * lightColor;
+    vec3 V = normalize(viewPos - FragPos);
+    vec3 R = reflect(-L, n);
+    float spec = pow(max(dot(V, R), 0.0), 32.0);
+    vec3 specular = spec * lightCol;
 
-    return ambient + diffuse + specular;
+    // shadows for this light
+    float shadow = ShadowCalculation(FragPosLightSpace, n, L);
+
+    return ambient + (1.0 - shadow) * (diffuse + specular);
 }
 
 void main()
 {
     vec3 base = texture(textureSampler, TexCoord).rgb;
     vec3 lighting = CalcLight(lightPos1) + CalcLight(lightPos2);
-    vec3 textureColor = texture(textureSampler, TexCoord).rgb;
-    FragColor = vec4(lighting * textureColor, 1.0);
+    FragColor = vec4(lighting * base, 1.0);
 }

@@ -41,31 +41,8 @@ constexpr int JACK_O_LANTERN_TEX_SLOT = 5;
 constexpr int MESH_TEX_SLOT = 6;
 constexpr int GLOWSTONE_TEX_SLOT = 7;
 
-
-int CURRENT_CUBE_TEX_SLOT;
-
-//Texture ID declaration
-//------------------------------------------
-GLuint grassTextureID;
-GLuint buildingTextureID ;
-GLuint lampTextureID;
-GLuint laserTextureID ;
-GLuint monsterTextureID ;
-GLuint jack_o_lanternTextureID ;
-GLuint meshTextureID ;
-GLuint glowstoneTextureID ;
-
-
-
-// Flying cube texture & color control
-//-------------------------------------
-int flyingCubeTextureID;
-glm::vec3 flyingCubeColor(1.0f, 1.0f, 1.0f); // default white
-bool kKeyPressed = false; // to avoid multiple toggles per press
-
 // Variables to call and define later
 // ----------------------------------
-
 GLFWwindow* window = nullptr;
 float spinningCubeAngle = 0.0f;
 Geometry geometry;
@@ -105,56 +82,6 @@ float lastFrameTime;
 int lastMouseLeftState;
 double lastMousePosX, lastMousePosY;
 
-// --- Monster state (position, scale, radius) ---
-glm::vec3 gMonsterPos = glm::vec3(0.0f, 0.0f, 0.0f);
-constexpr float gMonsterScale = 0.5f;     // matches your render scale
-constexpr float gMonsterRadiusLocal = 2.0f; // tweak to fit your Stone.obj bounds
-inline float getMonsterRadiusWorld() {
-    return gMonsterRadiusLocal * gMonsterScale;
-}
-
-// --- Utility: squared distance between XZ points ---
-inline float dist2_xz(const glm::vec3& a, const glm::vec3& b) {
-    glm::vec2 da(a.x, a.z), db(b.x, b.z);
-    glm::vec2 d = da - db;
-    return glm::dot(d, d);
-}
-
-// --- Segment–sphere intersection (finite beam) ---
-inline bool segmentHitsSphere(const glm::vec3& A, const glm::vec3& B,
-                              const glm::vec3& C, float R)
-{
-    glm::vec3 AB = B - A;
-    float ab2 = glm::dot(AB, AB);
-    if (ab2 == 0.0f) return glm::length(C - A) <= R*R;
-    float t = glm::dot(C - A, AB) / ab2;
-    t = glm::clamp(t, 0.0f, 1.0f);
-    glm::vec3 closest = A + t * AB;
-    return glm::length(C - closest) <= R*R;
-}
-
-// --- Random spawn away from center and towers ---
-glm::vec3 randomMonsterSpawn(float maxRange = 40.0f, float minCenterDist = 5.0f) {
-    for (int tries = 0; tries < 64; ++tries) {
-        float x = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
-        float z = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
-        glm::vec3 p(x, 0.0f, z);
-
-        // keep away from towers a bit
-        bool ok = true;
-        for (const auto& t : towerList) {
-            if (dist2_xz(p, t.position) < (2.5f * 2.5f)) { ok = false; break; }
-        }
-        if (ok) return p;
-    }
-    // fallback
-    return glm::vec3(0.0f);
-}
-
-inline void respawnMonster() {
-    gMonsterPos = randomMonsterSpawn();
-}
-
 // Main Function
 // -------------
 int main(){
@@ -179,13 +106,6 @@ int main(){
     GLuint jack_o_lanternTextureID = Texture::load("Textures/Jack_O_Lantern.png");
     GLuint meshTextureID = Texture::load("Textures/mesh.png");
     GLuint glowstoneTextureID = Texture::load("Textures/Glowstone.jpg");
-
-    //Sets lamp as default lamp texture
-    //-------------------------------------
-
-    CURRENT_CUBE_TEX_SLOT =LAMP_TEX_SLOT;
-    
-     flyingCubeTextureID =lampTextureID ; 
 
     // Create Framebuffer for shawfow mapping
     // --------------------------------------
@@ -338,13 +258,14 @@ int main(){
         glActiveTexture(GL_TEXTURE8); // set to free unit
         glBindTexture(GL_TEXTURE_2D, depthMap);
         lightingShaderProgram.setInt("shadowMap", 8);
+
         
         // Render the scene
         // ----------------
         renderScene(lightingShaderProgram, towerList, lightCubeVAO, grassTextureID, buildingTextureID);
         // Render the light cubes
         // ----------------------
-        renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, flyingCubeTextureID);
+        renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, lampTextureID);
         // Render the projectiles
         // ----------------------
         renderProjectiles(lightingShaderProgram, laserTextureID);
@@ -384,16 +305,13 @@ int main(){
 // -------------------------------------------
 void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint groundTex, GLuint buildingTex) {
     mat4 identity = mat4(1.0f);
-shader.setVec3("overrideColor", glm::vec3(1.0f));
+
     mat4 groundMatrix = glm::scale(glm::translate(identity, vec3(0.0f, -1.0f, 0.0f)), vec3(100.0f, 0.1f, 100.0f));
     shader.use();
     Renderer::bindTexture(shader.getID(), groundTex, "textureSampler", GRASS_TEX_SLOT);
     Renderer::setWorldMatrix(shader.getID(), groundMatrix);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
-
-
-    shader.setVec3("overrideColor", glm::vec3(1.0f));
 
     Renderer::bindTexture(shader.getID(), buildingTex, "textureSampler", BUILDING_TEX_SLOT);
     for (const auto& tower : towers) {
@@ -408,8 +326,7 @@ shader.setVec3("overrideColor", glm::vec3(1.0f));
 void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex) {
     mat4 identity = mat4(1.0f);
     shader.use();
-    shader.setVec3("overrideColor",flyingCubeColor);
-    Renderer::bindTexture(shader.getID(), tex, "textureSampler",CURRENT_CUBE_TEX_SLOT);
+    Renderer::bindTexture(shader.getID(), tex, "textureSampler", LAMP_TEX_SLOT);
 
     auto drawCube = [&](const vec3& pos) {
         mat4 model = glm::scale(glm::translate(identity, pos), vec3(0.5f));
@@ -419,7 +336,6 @@ void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& 
     };
     drawCube(pos1);
     drawCube(pos2);
- 
 }
 
 // Draw Projectiles as they are shot
@@ -452,48 +368,46 @@ void renderProjectiles(Shader& shader, GLuint tex){
 void renderAvatar(Shader& shader){
         
     spinningCubeAngle += 180.0f * dt;
-        
-    spinningCubeAngle += 180.0f * dt;
-    // Draw avatar in view space for first person camera
-    // and in world space for third person camera
-    if (cameraFirstPerson){
-        mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
-                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                        scale(mat4(1.0f), vec3(0.05f));
-        
-        Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
-        Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
-    }
-    else{
-        vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
-        vec3 avatarPosition = camera.getPosition() + avatarOffset;
+        // Draw avatar in view space for first person camera
+        // and in world space for third person camera
+        if (cameraFirstPerson){
+            mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
+                                          rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                          scale(mat4(1.0f), vec3(0.05f));
+            
+            Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
+            Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
+        }
+        else{
+            vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
+            vec3 avatarPosition = camera.getPosition() + avatarOffset;
 
-        mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
-                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                        scale(mat4(1.0f), vec3(0.3f));
-        
-        Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
-    }
-    glDrawArrays(GL_TRIANGLES, 0, 36);
+            mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
+                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                           scale(mat4(1.0f), vec3(0.3f));
+            
+            Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
+        }
+        glDrawArrays(GL_TRIANGLES, 0, 36);
 
-    // Set the view matrix for first and third person cameras
-    // - In first person, camera lookat is set like below
-    // - In third person, camera position is on a sphere looking towards center
-    mat4 viewMatrix(1.0f);
-    
-    if (cameraFirstPerson){
-        viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
+        // Set the view matrix for first and third person cameras
+        // - In first person, camera lookat is set like below
+        // - In third person, camera position is on a sphere looking towards center
+        mat4 viewMatrix(1.0f);
+        
+        if (cameraFirstPerson){
+            viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
+        }
+        else{
+            // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
+            float radius = 5.0f;
+            vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
+                                                  radius * sinf(camera.getPhi()),
+                                                  -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
+            viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
+        }
+        Renderer::setViewMatrix(shader.getID(), viewMatrix);
     }
-    else{
-        // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
-        float radius = 5.0f;
-        vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
-                                                radius * sinf(camera.getPhi()),
-                                                -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
-        viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
-    }
-    Renderer::setViewMatrix(shader.getID(), viewMatrix);
-}
 
 // Render monster using an OBJ model
 // ---------------------------------
@@ -516,7 +430,6 @@ void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint te
     glBindVertexArray(stoneVAO);
     //TODO3 Draw model as elements, instead of as arrays
     glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
-    //TODO3 Draw model as elements, instead of as arrays
     glBindVertexArray(0);
 }
 
@@ -667,43 +580,6 @@ void processInput(GLFWwindow *window)
         cameraFirstPerson = true;
     if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
         cameraFirstPerson = false;
-
-        //Random color chang of cubes
-        //---------------------------------------
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && !kKeyPressed) {
-            kKeyPressed = true;
-            flyingCubeColor = glm::vec3(
-                static_cast<float>(rand()) / RAND_MAX,  
-                static_cast<float>(rand()) / RAND_MAX,  
-                static_cast<float>(rand()) / RAND_MAX);
-
-            switch (rand()%4){
-                case 0:
-                    CURRENT_CUBE_TEX_SLOT = MESH_TEX_SLOT;
-                    flyingCubeTextureID =MESH_TEX_SLOT +1;
-                break;
-
-                case 1:
-                    CURRENT_CUBE_TEX_SLOT = JACK_O_LANTERN_TEX_SLOT;
-                    flyingCubeTextureID =JACK_O_LANTERN_TEX_SLOT +1;
-                    break;
-
-                case 2:
-                    CURRENT_CUBE_TEX_SLOT = LAMP_TEX_SLOT;
-                    flyingCubeTextureID =LAMP_TEX_SLOT +1;
-                    break;
-                case 3:
-                    CURRENT_CUBE_TEX_SLOT = GLOWSTONE_TEX_SLOT;
-                    flyingCubeTextureID =GLOWSTONE_TEX_SLOT+1;
-                    break;
-            default:
-                break;
-            }
-        }
-        if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
-            kKeyPressed = false;
-        }
-
     // Use camera lookat and side vectors to update positions with ASDW + SHIFT
     // ------------------------------------------------------------------------
     camera.processInput(window);
