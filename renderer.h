@@ -35,7 +35,8 @@ public:
 
         // Check if the textureSampler is not found, happened me to once...better be safe
         if (location == -1) {
-            std::cerr << "[RENDERER LOG] Uniform '" << uniformName << "' not found in shader program.\n";
+            std::cerr << "[RENDERER LOG] Uniform '" << uniformName << "' not found in program:" << shaderProgram 
+                << "\nTextureID: " << textureUnitIndex << std::endl;
         }
     }
     // Clear the buffers
