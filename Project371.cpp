@@ -58,6 +58,7 @@ void renderProjectiles(Shader& shader, GLuint tex);
 void renderAvatar(Shader& shader);
 void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2);
 void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO);
+void renderMonsterFromLight(Shader& shadowShader, GLuint monsterVAO, int monsterVertexCount);
 GLuint setupModelVBO(string path, int& vertexCount);
 GLuint setupModelEBO(string path, int& vertexCount);
 
@@ -203,22 +204,29 @@ int main(){
         glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
         // Render to depth map
-        shadowShaderProgram.use(); // Uses shadowDepth.vert and shadowDepth.frag
+        shadowShaderProgram.use();
         shadowShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 
         glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        // IMPORTANT when GL_CULL_FACE is enabled:
+        // 1) Draw cubes (ground/buildings) with front-face culling to reduce acne
         glEnable(GL_CULL_FACE);
         GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
-        glCullFace(GL_FRONT); // render front faces to reduce self-shadow acne
+        glCullFace(GL_FRONT);
 
         renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
 
-        // Restore
+        // Draw the monster into the depth map too.
+        // Disable culling for safety (OBJ winding can be inconsistent).
+        glDisable(GL_CULL_FACE);
+        renderMonsterFromLight(shadowShaderProgram, stoneVAO, stoneVertices);
+
+        // Restore state
+        glEnable(GL_CULL_FACE);
         glCullFace(prevCull);
+
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
         // Process Input
@@ -439,6 +447,18 @@ void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers
         glDrawArrays(GL_TRIANGLES, 0, 36);
     }
 
+    glBindVertexArray(0);
+}
+
+// Render the monster into the shadow map (depth pass)
+// ---------------------------------------------------
+void renderMonsterFromLight(Shader& shadowShader, GLuint monsterVAO, int monsterVertexCount){
+    glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))
+                    * glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)); // must match lighting pass!
+    shadowShader.setMat4("worldMatrix", model);
+
+    glBindVertexArray(monsterVAO);
+    glDrawArrays(GL_TRIANGLES, 0, monsterVertexCount);
     glBindVertexArray(0);
 }
 
