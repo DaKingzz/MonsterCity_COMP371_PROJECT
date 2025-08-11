@@ -37,9 +37,36 @@ constexpr int BUILDING_TEX_SLOT = 1;
 constexpr int LAMP_TEX_SLOT = 2;
 constexpr int LASER_TEX_SLOT = 3;
 constexpr int MONSTER_TEX_SLOT = 4;
+constexpr int JACK_O_LANTERN_TEX_SLOT = 5;
+constexpr int MESH_TEX_SLOT = 6;
+constexpr int GLOWSTONE_TEX_SLOT = 7;
+
+
+int CURRENT_CUBE_TEX_SLOT;
+
+//Texture ID declaration
+//------------------------------------------
+GLuint grassTextureID;
+GLuint buildingTextureID ;
+GLuint lampTextureID;
+GLuint laserTextureID ;
+GLuint monsterTextureID ;
+GLuint jack_o_lanternTextureID ;
+GLuint meshTextureID ;
+GLuint glowstoneTextureID ;
+
+
+
+// Flying cube texture & color control
+//-------------------------------------
+int flyingCubeTextureID;
+glm::vec3 flyingCubeColor(1.0f, 1.0f, 1.0f); // default white
+bool kKeyPressed = false; // to avoid multiple toggles per press
+
 
 // Variables to call and define later
 // ----------------------------------
+
 GLFWwindow* window = nullptr;
 float spinningCubeAngle = 0.0f;
 Geometry geometry;
@@ -191,6 +218,19 @@ int main(){
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
     GLuint monsterTextureID = Texture::load("Textures/sand.jpg");
+    GLuint jack_o_lanternTextureID = Texture::load("Textures/Jack_O_Lantern.png");
+     GLuint meshTextureID = Texture::load("Textures/mesh.png");
+      GLuint glowstoneTextureID = Texture::load("Textures/Glowstone.jpg");
+
+    //Sets lamp as default lamp texture
+    //-------------------------------------
+
+    CURRENT_CUBE_TEX_SLOT =LAMP_TEX_SLOT;
+    
+     flyingCubeTextureID =lampTextureID ; 
+    
+
+
 
     // Build and Compile and Link Shaders
     // ----------------------------------
@@ -283,7 +323,7 @@ int main(){
         renderScene(lightingShaderProgram, towerList, lightCubeVAO, grassTextureID, buildingTextureID);
         // Render the light cubes
         // ----------------------
-        renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, lampTextureID);
+        renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, flyingCubeTextureID);
         // Render the projectiles
         // ----------------------
         renderProjectiles(lightingShaderProgram, laserTextureID);
@@ -330,6 +370,51 @@ void processInput(GLFWwindow *window)
         cameraFirstPerson = true;
     if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
         cameraFirstPerson = false;
+
+//Random color chang of cubes
+//---------------------------------------
+if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS && !kKeyPressed) {
+    kKeyPressed = true;
+
+
+                  flyingCubeColor = glm::vec3(
+    static_cast<float>(rand()) / RAND_MAX,  
+    static_cast<float>(rand()) / RAND_MAX,  
+    static_cast<float>(rand()) / RAND_MAX  
+                  );
+
+    switch (rand()%4)
+    {
+    case 0:
+    CURRENT_CUBE_TEX_SLOT = MESH_TEX_SLOT;
+   flyingCubeTextureID =MESH_TEX_SLOT +1;
+        break;
+
+     case 1:
+      CURRENT_CUBE_TEX_SLOT = JACK_O_LANTERN_TEX_SLOT;
+     flyingCubeTextureID =JACK_O_LANTERN_TEX_SLOT +1;
+        break;
+
+         case 2:
+      CURRENT_CUBE_TEX_SLOT = LAMP_TEX_SLOT;
+     flyingCubeTextureID =LAMP_TEX_SLOT +1;
+        break;
+
+         case 3:
+      CURRENT_CUBE_TEX_SLOT = GLOWSTONE_TEX_SLOT;
+     flyingCubeTextureID =GLOWSTONE_TEX_SLOT+1;
+        break;
+    
+    default:
+        break;
+    }
+
+  
+}
+if (glfwGetKey(window, GLFW_KEY_K) == GLFW_RELEASE) {
+    kKeyPressed = false;
+}
+
     // Use camera lookat and side vectors to update positions with ASDW + SHIFT
     // ------------------------------------------------------------------------
     camera.processInput(window);
@@ -339,13 +424,16 @@ void processInput(GLFWwindow *window)
 // -------------------------------------------
 void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint groundTex, GLuint buildingTex) {
     mat4 identity = mat4(1.0f);
-
+shader.setVec3("overrideColor", glm::vec3(1.0f));
     mat4 groundMatrix = glm::scale(glm::translate(identity, vec3(0.0f, -1.0f, 0.0f)), vec3(100.0f, 0.1f, 100.0f));
     shader.use();
     Renderer::bindTexture(shader.getID(), groundTex, "textureSampler", GRASS_TEX_SLOT);
     Renderer::setWorldMatrix(shader.getID(), groundMatrix);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+
+    shader.setVec3("overrideColor", glm::vec3(1.0f));
 
     Renderer::bindTexture(shader.getID(), buildingTex, "textureSampler", BUILDING_TEX_SLOT);
     for (const auto& tower : towers) {
@@ -360,7 +448,8 @@ void renderScene(Shader& shader, const vector<Tower>& towers, GLuint vao, GLuint
 void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& pos2, GLuint tex) {
     mat4 identity = mat4(1.0f);
     shader.use();
-    Renderer::bindTexture(shader.getID(), tex, "textureSampler", LAMP_TEX_SLOT);
+    shader.setVec3("overrideColor",flyingCubeColor);
+    Renderer::bindTexture(shader.getID(), tex, "textureSampler",CURRENT_CUBE_TEX_SLOT);
 
     auto drawCube = [&](const vec3& pos) {
         mat4 model = glm::scale(glm::translate(identity, pos), vec3(0.5f));
@@ -370,6 +459,7 @@ void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& 
     };
     drawCube(pos1);
     drawCube(pos2);
+ 
 }
 
 // Draw Projectiles as they are shot
