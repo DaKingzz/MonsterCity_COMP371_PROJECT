@@ -7,6 +7,9 @@ in vec4 FragPosLightSpace;
 uniform vec3 viewPos;
 uniform vec3 lightPos1;
 uniform vec3 lightPos2;
+
+uniform vec3 overrideColor;
+
 uniform sampler2D shadowMap;
 uniform sampler2D textureSampler;
 
@@ -71,7 +74,12 @@ vec3 CalcLight(vec3 lightPos)
 
 void main()
 {
-    vec3 base = texture(textureSampler, TexCoord).rgb;
+    vec3 textureColor = texture(textureSampler, TexCoord).rgb;
     vec3 lighting = CalcLight(lightPos1) + CalcLight(lightPos2);
-    FragColor = vec4(lighting * base, 1.0);
+    vec3 finalColor = textureColor;
+    if (overrideColor != vec3(1.0)) {
+        finalColor = mix(textureColor, overrideColor, 0.5);
+    }
+
+    FragColor = vec4(lighting * finalColor, 1.0);
 }
