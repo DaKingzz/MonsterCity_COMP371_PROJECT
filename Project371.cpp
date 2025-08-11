@@ -210,6 +210,27 @@ GLuint setupModelEBO(string path, int& vertexCount)
 	return VAO;
 }
 
+void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO)
+{
+    glm::mat4 identity = glm::mat4(1.0f);
+
+    // Ground
+    glm::mat4 groundMatrix = glm::scale(glm::translate(identity, glm::vec3(0.0f, -1.0f, 0.0f)), glm::vec3(60.0f, 0.1f, 60.0f));
+    shadowShader.setMat4("worldMatrix", groundMatrix);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Buildings
+    for (const auto& tower : towers) {
+        glm::mat4 towerMatrix = glm::translate(identity, tower.position);
+        towerMatrix = glm::scale(towerMatrix, glm::vec3(2.0f, tower.height, 2.0f));
+        shadowShader.setMat4("worldMatrix", towerMatrix);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+
+    glBindVertexArray(0);
+}
+
 // --- Monster state (position, scale, radius) ---
 glm::vec3 gMonsterPos = glm::vec3(0.0f, 0.0f, 0.0f);
 constexpr float gMonsterScale = 0.5f;     // matches your render scale
@@ -296,10 +317,36 @@ int main(){
 
 
 
+    // Create Framebuffer for shawfow mapping
+    // --------------------------------------
+    GLuint depthMapFBO;
+    glGenFramebuffers(1, &depthMapFBO);
+
+    // Create the depth texture
+    const unsigned int SHADOW_WIDTH = 1024, SHADOW_HEIGHT = 1024;
+    GLuint depthMap;
+    glGenTextures(1, &depthMap);
+    glBindTexture(GL_TEXTURE_2D, depthMap);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, SHADOW_WIDTH, SHADOW_HEIGHT, 0,
+                GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+    float borderColor[] = { 1.0, 1.0, 1.0, 1.0 };
+    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthMap, 0);
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     // Build and Compile and Link Shaders
     // ----------------------------------
     Shader lightingShaderProgram("Shaders/Phong.vert", "Shaders/Phong.frag");
     Shader monsterShaderProgram("Shaders/Monster.vert","Shaders/Monster.frag");
+    Shader shadowShaderProgram("Shaders/ShadowDepth.vert", "Shaders/ShadowDepth.frag");
     lightCubeShader = &lightingShaderProgram;
 
     // Manage Building Postions Generation
@@ -360,22 +407,50 @@ int main(){
         dt = glfwGetTime() - lastFrameTime;
         lastFrameTime += dt;
 
-        // Process Input
-        // -------------
-        processInput(window);
-        
-        // Renderer Clear
-        // --------------
-        Renderer::clear(); // Clears color and depth buffers
-
-        // Activate Shader to draw with colors or textures
-        // -----------------------------------------------
+        // Light Cube Variables
         float time = glfwGetTime();
         vec3 center = vec3(0.0f, 5.0f, 0.0f);
         float radius = 10.0f;
         vec3 lightPos1 = getLightPos(0.0f, time);
         vec3 lightPos2 = getLightPos(3.14f, time);
 
+        // Shadow Pass
+        // -----------
+        glm::vec3 lightPos = getLightPos(0.0f, time);
+        glm::mat4 lightProjection = glm::ortho(-40.0f, 40.0f, -40.0f, 40.0f, 1.0f, 100.0f);
+        glm::mat4 lightView = glm::lookAt(lightPos, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+        glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+
+        // Render to depth map
+        shadowShaderProgram.use(); // Uses shadowDepth.vert and shadowDepth.frag
+        shadowShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+        glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+        glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
+        glClear(GL_DEPTH_BUFFER_BIT);
+
+        // IMPORTANT when GL_CULL_FACE is enabled:
+        glEnable(GL_CULL_FACE);
+        GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
+        glCullFace(GL_FRONT); // render front faces to reduce peter-panning/self-shadow acne
+
+        renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
+
+        // restore
+        glCullFace(prevCull);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+        // Process Input
+        // -------------
+        processInput(window);
+        
+        // Light Pass + Renderer Clear
+        // ---------------------------
+        glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
+        Renderer::clear(); // Clears color and depth buffers
+
+        // Activate Shader to draw with colors or textures
+        // -----------------------------------------------
         lightingShaderProgram.use();
         Renderer::setViewMatrix(lightingShaderProgram.getID(), camera.getViewMatrix());
 
@@ -383,6 +458,12 @@ int main(){
         lightingShaderProgram.setVec3("lightPos1", lightPos1);
         lightingShaderProgram.setVec3("lightPos2", lightPos2);
         lightingShaderProgram.setVec3("viewPos", camera.getPosition());
+        lightingShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+        
+        glActiveTexture(GL_TEXTURE5); // set to free unit
+        glBindTexture(GL_TEXTURE_2D, depthMap);
+        lightingShaderProgram.setInt("shadowMap", 5);
+
         
         // Render the scene
         // ----------------
@@ -398,6 +479,9 @@ int main(){
         renderAvatar(lightingShaderProgram);
         // Render the monster using a model
         // --------------------------------
+        Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
+        monsterShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+        monsterShaderProgram.setInt("shadowMap", 5);
         renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID, lightPos1, lightPos2);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -680,7 +764,7 @@ bool InitContext() {
 
     // Create Window and rendering context using GLFW, resolution is 800x600
     // ------------------------------------------------------------------
-    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Comp 371 - Project", NULL, NULL);
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Comp 371 - Project 371 - Assignment", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
