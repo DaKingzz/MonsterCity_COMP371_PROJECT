@@ -21,7 +21,6 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
-#include <glm/gtx/norm.hpp>
 
 using namespace std;
 using namespace glm;
@@ -234,8 +233,6 @@ int main(){
         towerList.push_back({ glm::vec3(x, 0.0f, z), height });
     }
 
-    respawnMonster();
-
     // Set up Models
     // -------------
     string monsterPath = "Models/Stone.obj";
@@ -303,7 +300,7 @@ int main(){
         // 1) Draw cubes (ground/buildings) with front-face culling to reduce acne
         glEnable(GL_CULL_FACE);
         GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
-        glCullFace(GL_FRONT);
+        glCullFace(GL_FRONT); // render front faces to reduce self-shadow acne
 
         renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
 
@@ -430,49 +427,31 @@ void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& 
 void renderProjectiles(Shader& shader, GLuint tex){
     shader.use();
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", LASER_TEX_SLOT);
-
-    const float R = getMonsterRadiusWorld();
-
-    for (auto it = projectileList.begin(); it != projectileList.end(); /*++ in body*/) {
-        // Save previous position
-        const glm::vec3& prevPos = it->prevPosition();
-        const glm::vec3& currPos = it->position();
-
-        // Advance simulation and draw
+    // Update and draw projectiles
+    for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
+    {
         it->Update(dt);
         it->Draw();
-
-        // 4) Segment–sphere test vs. monster
-        if (segmentHitsSphere(prevPos, currPos, gMonsterPos, R)) {
-            respawnMonster();
-            // Remove projectile if it hits the monster
-            it = projectileList.erase(it);
-            continue;
-        }
-
-        if (glm::length2(currPos) > 800.0f * 800.0f) {
-            it = projectileList.erase(it);
-            continue;
-        }
-        ++it;
     }
-    // Fire on click
+
+    // Shoot projectiles on mouse left click
     if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         const float projectileSpeed = 25.0f;
-        glm::vec3 direction = glm::normalize(camera.getlookAt());
-        glm::vec3 velocity = direction * projectileSpeed;
-        glm::vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
-
-        projectileList.push_back(Projectile(spawnPosition, velocity, shader.getID()));
+        vec3 direction = normalize(camera.getlookAt());
+        vec3 velocity = direction * projectileSpeed;
+        vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
+        
+        projectileList.push_back(Projectile(spawnPosition,velocity ,  shader.getID()));
     }
     lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 }
 
-
 // Draw avatar in 1st or 3rd person
 // --------------------------------
 void renderAvatar(Shader& shader){
+        
+    spinningCubeAngle += 180.0f * dt;
         
     spinningCubeAngle += 180.0f * dt;
         // Draw avatar in view space for first person camera
@@ -515,6 +494,7 @@ void renderAvatar(Shader& shader){
         }
         Renderer::setViewMatrix(shader.getID(), viewMatrix);
     }
+    }
 
 // Render monster using an OBJ model
 // ---------------------------------
@@ -535,6 +515,7 @@ void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint te
 
     //Draw the stored vertex objects
     glBindVertexArray(stoneVAO);
+    //TODO3 Draw model as elements, instead of as arrays
     glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
     //TODO3 Draw model as elements, instead of as arrays
     glBindVertexArray(0);
@@ -756,7 +737,7 @@ bool InitContext() {
         return -1;
     }
     // Tell GLFW to capture mouse movement
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glfwMakeContextCurrent(window);
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 
