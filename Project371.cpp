@@ -37,6 +37,9 @@ constexpr int BUILDING_TEX_SLOT = 1;
 constexpr int LAMP_TEX_SLOT = 2;
 constexpr int LASER_TEX_SLOT = 3;
 constexpr int MONSTER_TEX_SLOT = 4;
+constexpr int JACK_O_LANTERN_TEX_SLOT = 5;
+constexpr int MESH_TEX_SLOT = 6;
+constexpr int GLOWSTONE_TEX_SLOT = 7;
 
 // Variables to call and define later
 // ----------------------------------
@@ -100,6 +103,9 @@ int main(){
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
     GLuint monsterTextureID = Texture::load("Textures/sand.jpg");
+    GLuint jack_o_lanternTextureID = Texture::load("Textures/Jack_O_Lantern.png");
+    GLuint meshTextureID = Texture::load("Textures/mesh.png");
+    GLuint glowstoneTextureID = Texture::load("Textures/Glowstone.jpg");
 
     // Create Framebuffer for shawfow mapping
     // --------------------------------------
@@ -249,9 +255,9 @@ int main(){
         lightingShaderProgram.setVec3("viewPos", camera.getPosition());
         lightingShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
         
-        glActiveTexture(GL_TEXTURE5); // set to free unit
+        glActiveTexture(GL_TEXTURE8); // set to free unit
         glBindTexture(GL_TEXTURE_2D, depthMap);
-        lightingShaderProgram.setInt("shadowMap", 5);
+        lightingShaderProgram.setInt("shadowMap", 8);
 
         
         // Render the scene
@@ -270,7 +276,7 @@ int main(){
         // --------------------------------
         Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
         monsterShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-        monsterShaderProgram.setInt("shadowMap", 5);
+        monsterShaderProgram.setInt("shadowMap", 8);
         renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID, lightPos1, lightPos2);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
