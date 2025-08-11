@@ -129,4 +129,3 @@ bool loadOBJ(
 
 	return true;
 }
-
