@@ -15,6 +15,7 @@ W A S D + Left Click to shoot
 Just set the compiler to g++ in vs code and run it.
 
 **File Structure** <br>
+Project371: Main File where everything happens <br>
 Geometry: upload and transform into VAO objects, cubes, triangles <br>
 Shader: load and compile shaders + pass uniforms to shaders <br>
 Renderer: set transformations matrices + bind textures <br>
