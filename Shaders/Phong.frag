@@ -78,9 +78,9 @@ void main()
     vec3 lighting = CalcLight(lightPos1) + CalcLight(lightPos2);
     vec3 textureColor = texture(textureSampler, TexCoord).rgb;
 
-vec3 finalColor = textureColor;
-  if (overrideColor != vec3(1.0)) {
+    vec3 finalColor = textureColor;
+    if (overrideColor != vec3(1.0)) {
        finalColor = mix(textureColor, overrideColor, 0.5);
     }
-FragColor = vec4(lighting * finalColor, 1.0);
+    FragColor = vec4(lighting * finalColor, 1.0);
 }
