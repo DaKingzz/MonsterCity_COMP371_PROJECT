@@ -22,5 +22,6 @@ void main()
     TexCoord = texCoords;
     FragPosLightSpace = lightSpaceMatrix * worldPosition;
 
+    FragPosLightSpace = lightSpaceMatrix * worldPosition;
     gl_Position = projection * view * worldPosition;
 }
