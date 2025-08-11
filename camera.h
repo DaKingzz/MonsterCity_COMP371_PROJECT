@@ -94,6 +94,10 @@ public:
         return verticalAngle;
     }
 
+    float getYaw(){
+        return horizontalAngle;
+    }
+
     // Process camera inputs
     // ---------------------
     void processInput(GLFWwindow* window) {
