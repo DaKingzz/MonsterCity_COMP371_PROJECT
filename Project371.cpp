@@ -126,11 +126,11 @@ inline bool segmentHitsSphere(const glm::vec3& A, const glm::vec3& B,
 {
     glm::vec3 AB = B - A;
     float ab2 = glm::dot(AB, AB);
-    if (ab2 == 0.0f) return glm::length2(C - A) <= R*R;
+    if (ab2 == 0.0f) return glm::length(C - A) <= R*R;
     float t = glm::dot(C - A, AB) / ab2;
     t = glm::clamp(t, 0.0f, 1.0f);
     glm::vec3 closest = A + t * AB;
-    return glm::length2(C - closest) <= R*R;
+    return glm::length(C - closest) <= R*R;
 }
 
 // --- Random spawn away from center and towers ---
@@ -454,47 +454,46 @@ void renderAvatar(Shader& shader){
     spinningCubeAngle += 180.0f * dt;
         
     spinningCubeAngle += 180.0f * dt;
-        // Draw avatar in view space for first person camera
-        // and in world space for third person camera
-        if (cameraFirstPerson){
-            mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
-                                          rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                          scale(mat4(1.0f), vec3(0.05f));
-            
-            Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
-            Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
-        }
-        else{
-            vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
-            vec3 avatarPosition = camera.getPosition() + avatarOffset;
-
-            mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
-                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                           scale(mat4(1.0f), vec3(0.3f));
-            
-            Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
-        }
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        // Set the view matrix for first and third person cameras
-        // - In first person, camera lookat is set like below
-        // - In third person, camera position is on a sphere looking towards center
-        mat4 viewMatrix(1.0f);
+    // Draw avatar in view space for first person camera
+    // and in world space for third person camera
+    if (cameraFirstPerson){
+        mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
+                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                        scale(mat4(1.0f), vec3(0.05f));
         
-        if (cameraFirstPerson){
-            viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
-        }
-        else{
-            // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
-            float radius = 5.0f;
-            vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
-                                                  radius * sinf(camera.getPhi()),
-                                                  -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
-            viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
-        }
-        Renderer::setViewMatrix(shader.getID(), viewMatrix);
+        Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
+        Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
     }
+    else{
+        vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
+        vec3 avatarPosition = camera.getPosition() + avatarOffset;
+
+        mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
+                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                        scale(mat4(1.0f), vec3(0.3f));
+        
+        Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
     }
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Set the view matrix for first and third person cameras
+    // - In first person, camera lookat is set like below
+    // - In third person, camera position is on a sphere looking towards center
+    mat4 viewMatrix(1.0f);
+    
+    if (cameraFirstPerson){
+        viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
+    }
+    else{
+        // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
+        float radius = 5.0f;
+        vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
+                                                radius * sinf(camera.getPhi()),
+                                                -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
+        viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
+    }
+    Renderer::setViewMatrix(shader.getID(), viewMatrix);
+}
 
 // Render monster using an OBJ model
 // ---------------------------------
