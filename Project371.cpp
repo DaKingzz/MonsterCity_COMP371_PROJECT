@@ -21,7 +21,6 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
-#include <glm/gtx/norm.hpp>
 
 using namespace std;
 using namespace glm;
@@ -75,10 +74,6 @@ GLuint lightCubeVAO;
 Shader* lightCubeShader;
 vector<Tower> towerList;
 list<Projectile> projectileList;
-glm::vec3 gMonsterPivotLocal;
-glm::vec3 gMonsterBoundsMin;
-glm::vec3 gMonsterBoundsMax;
-static float gAngle = 0.0f;
 
 // Methods to call and define later
 // --------------------------------
@@ -89,6 +84,9 @@ void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& 
 void renderProjectiles(Shader& shader, GLuint tex);
 void renderAvatar(Shader& shader);
 void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2);
+void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO);
+GLuint setupModelVBO(string path, int& vertexCount);
+GLuint setupModelEBO(string path, int& vertexCount);
 
 // Screen Settings
 // ---------------
@@ -106,181 +104,6 @@ float dt;
 float lastFrameTime;
 int lastMouseLeftState;
 double lastMousePosX, lastMousePosY;
-
-
-GLuint setupModelVBO(string path, int& vertexCount) {
-	std::vector<glm::vec3> vertices;
-	std::vector<glm::vec3> normals;
-	std::vector<glm::vec2> UVs;
-	
-	//read the vertex data from the model's OBJ file
-	loadOBJ(path.c_str(), vertices, normals, UVs);
-
-	GLuint VAO;
-	glGenVertexArrays(1, &VAO);
-	glBindVertexArray(VAO); //Becomes active VAO
-	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
-
-	//Vertex VBO setup
-	GLuint vertices_VBO;
-	glGenBuffers(1, &vertices_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-
-	//Normals VBO setup
-	GLuint normals_VBO;
-	glGenBuffers(1, &normals_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
-	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(1);
-
-	//UVs VBO setup
-	GLuint uvs_VBO;
-	glGenBuffers(1, &uvs_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
-	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(2);
-
-    // Pivot point calculation
-    glm::vec3 vmin(FLT_MAX), vmax(-FLT_MAX);
-    for (auto& v : vertices) { vmin = glm::min(vmin, v); vmax = glm::max(vmax, v); }
-    
-    gMonsterBoundsMin = vmin;
-    gMonsterBoundsMax = vmax;
-    gMonsterPivotLocal = 0.5f * (vmin + vmax);
-
-	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs, as we are using multiple VAOs)
-	vertexCount = vertices.size();
-	return VAO;
-}
-
-//Sets up a model using an Element Buffer Object to refer to vertex data
-GLuint setupModelEBO(string path, int& vertexCount)
-{
-	vector<int> vertexIndices; //The contiguous sets of three indices of vertices, normals and UVs, used to make a triangle
-	vector<glm::vec3> vertices;
-	vector<glm::vec3> normals;
-	vector<glm::vec2> UVs;
-
-	//read the vertices from the cube.obj file
-	//We won't be needing the normals or UVs for this program
-	loadOBJ2(path.c_str(), vertexIndices, vertices, normals, UVs);
-
-	GLuint VAO;
-	glGenVertexArrays(1, &VAO);
-	glBindVertexArray(VAO); //Becomes active VAO
-	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
-
-	//Vertex VBO setup
-	GLuint vertices_VBO;
-	glGenBuffers(1, &vertices_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
-	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(0);
-
-	//Normals VBO setup
-	GLuint normals_VBO;
-	glGenBuffers(1, &normals_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
-	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(1);
-
-	//UVs VBO setup
-	GLuint uvs_VBO;
-	glGenBuffers(1, &uvs_VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
-	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
-	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
-	glEnableVertexAttribArray(2);
-
-	//EBO setup
-	GLuint EBO;
-	glGenBuffers(1, &EBO);
-	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexIndices.size() * sizeof(int), &vertexIndices.front(), GL_STATIC_DRAW);
-
-	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs), remember: do NOT unbind the EBO, keep it bound to this VAO
-	vertexCount = vertexIndices.size();
-	return VAO;
-}
-
-void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO)
-{
-    glm::mat4 identity = glm::mat4(1.0f);
-
-    // Ground
-    glm::mat4 groundMatrix = glm::scale(glm::translate(identity, glm::vec3(0.0f, -1.0f, 0.0f)), glm::vec3(60.0f, 0.1f, 60.0f));
-    shadowShader.setMat4("worldMatrix", groundMatrix);
-    glBindVertexArray(cubeVAO);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-
-    // Buildings
-    for (const auto& tower : towers) {
-        glm::mat4 towerMatrix = glm::translate(identity, tower.position);
-        towerMatrix = glm::scale(towerMatrix, glm::vec3(2.0f, tower.height, 2.0f));
-        shadowShader.setMat4("worldMatrix", towerMatrix);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-    }
-
-    glBindVertexArray(0);
-}
-
-// --- Monster state (position, scale, radius) ---
-glm::vec3 gMonsterPos = glm::vec3(0.0f, 0.0f, 0.0f);
-constexpr float gMonsterScale = 0.5f;     // matches your render scale
-constexpr float gMonsterRadiusLocal = 2.0f; // tweak to fit your Stone.obj bounds
-inline float getMonsterRadiusWorld() {
-    return gMonsterRadiusLocal * gMonsterScale;
-}
-
-// --- Utility: squared distance between XZ points ---
-inline float dist2_xz(const glm::vec3& a, const glm::vec3& b) {
-    glm::vec2 da(a.x, a.z), db(b.x, b.z);
-    glm::vec2 d = da - db;
-    return glm::dot(d, d);
-}
-
-// --- Segment–sphere intersection (finite beam) ---
-inline bool segmentHitsSphere(const glm::vec3& A, const glm::vec3& B,
-                              const glm::vec3& C, float R)
-{
-    glm::vec3 AB = B - A;
-    float ab2 = glm::dot(AB, AB);
-    if (ab2 == 0.0f) return glm::length2(C - A) <= R*R;
-    float t = glm::dot(C - A, AB) / ab2;
-    t = glm::clamp(t, 0.0f, 1.0f);
-    glm::vec3 closest = A + t * AB;
-    return glm::length2(C - closest) <= R*R;
-}
-
-// --- Random spawn away from center and towers ---
-glm::vec3 randomMonsterSpawn(float maxRange = 40.0f, float minCenterDist = 5.0f) {
-    for (int tries = 0; tries < 64; ++tries) {
-        float x = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
-        float z = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
-        glm::vec3 p(x, 0.0f, z);
-
-        // keep away from towers a bit
-        bool ok = true;
-        for (const auto& t : towerList) {
-            if (dist2_xz(p, t.position) < (2.5f * 2.5f)) { ok = false; break; }
-        }
-        if (ok) return p;
-    }
-    // fallback
-    return glm::vec3(0.0f);
-}
-
-inline void respawnMonster() {
-    gMonsterPos = randomMonsterSpawn();
-}
-
 
 // Main Function
 // -------------
@@ -363,8 +186,6 @@ int main(){
         towerList.push_back({ glm::vec3(x, 0.0f, z), height });
     }
 
-    respawnMonster();
-
     // Set up Models
     // -------------
     string monsterPath = "Models/Stone.obj";
@@ -432,11 +253,11 @@ int main(){
         // IMPORTANT when GL_CULL_FACE is enabled:
         glEnable(GL_CULL_FACE);
         GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
-        glCullFace(GL_FRONT); // render front faces to reduce peter-panning/self-shadow acne
+        glCullFace(GL_FRONT); // render front faces to reduce self-shadow acne
 
         renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
 
-        // restore
+        // Restore
         glCullFace(prevCull);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -617,50 +438,31 @@ void renderLightCubes(Shader& shader, GLuint vao, const vec3& pos1, const vec3& 
 void renderProjectiles(Shader& shader, GLuint tex){
     shader.use();
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", LASER_TEX_SLOT);
-
-    const float R = getMonsterRadiusWorld();
-
-    for (auto it = projectileList.begin(); it != projectileList.end(); /*++ in body*/) {
-        // Save previous position
-        const glm::vec3& prevPos = it->prevPosition();
-        const glm::vec3& currPos = it->position();
-
-        // Advance simulation and draw
+    // Update and draw projectiles
+    for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
+    {
         it->Update(dt);
         it->Draw();
-
-        // 4) Segment–sphere test vs. monster
-        if (segmentHitsSphere(prevPos, currPos, gMonsterPos, R)) {
-            respawnMonster();
-            // Remove projectile if it hits the monster
-            it = projectileList.erase(it);
-            continue;
-        }
-
-        if (glm::length2(currPos) > 800.0f * 800.0f) {
-            it = projectileList.erase(it);
-            continue;
-        }
-        ++it;
     }
-    // Fire on click
+
+    // Shoot projectiles on mouse left click
     if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         const float projectileSpeed = 25.0f;
-        glm::vec3 direction = glm::normalize(camera.getlookAt());
-        glm::vec3 velocity = direction * projectileSpeed;
-        glm::vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
-
-        projectileList.push_back(Projectile(spawnPosition, velocity, shader.getID()));
+        vec3 direction = normalize(camera.getlookAt());
+        vec3 velocity = direction * projectileSpeed;
+        vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
+        
+        projectileList.push_back(Projectile(spawnPosition,velocity ,  shader.getID()));
     }
     lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 }
 
-
 // Draw avatar in 1st or 3rd person
 // --------------------------------
 void renderAvatar(Shader& shader){
-        spinningCubeAngle += 180.0f * dt;
+        
+    spinningCubeAngle += 180.0f * dt;
         // Draw avatar in view space for first person camera
         // and in world space for third person camera
         if (cameraFirstPerson){
@@ -700,50 +502,171 @@ void renderAvatar(Shader& shader){
             viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
         }
         Renderer::setViewMatrix(shader.getID(), viewMatrix);
-}
+    }
 
 // Render monster using an OBJ model
 // ---------------------------------
-void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex,
-                   glm::vec3 lightPos1, glm::vec3 lightPos2) {
-    // Monster position and scale
-    float s      = gMonsterScale;
-    float ymin   = gMonsterBoundsMin.y;
-    float yc     = gMonsterPivotLocal.y;
-    float groundY = 0.0f;
-
-    float worldY = groundY - (s * ymin + (1.0f - s) * yc);
-
-    glm::vec3 monsterWorldPos = glm::vec3(gMonsterPos.x, worldY, gMonsterPos.z);
+void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2){
     shader.use();
 
     shader.setVec3("lightPos1", lightPos1);
     shader.setVec3("lightPos2", lightPos2);
-    shader.setVec3("viewPos",  camera.getPosition());
+    shader.setVec3("viewPos", camera.getPosition());
 
-    // Spin angle (degrees/sec -> radians)
-    float t = static_cast<float>(glfwGetTime());
-    gAngle = t * glm::radians(45.0f);  // spin 45°/sec
+    // Move the model within the world
+    // -------------------------------
+    mat4 monsterModelMatrix = glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, 0.0f)) *
+                            glm::scale(mat4(1.0f), glm::vec3(1.0f)); // scale down
+    Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
 
-    // Local axis to spin around
-    glm::vec3 localAxis(1, 1, 1);
-
-    glm::mat4 M =
-        glm::translate(glm::mat4(1.0f), monsterWorldPos) *
-        glm::translate(glm::mat4(1.0f), gMonsterPivotLocal) *
-        glm::rotate   (glm::mat4(1.0f), gAngle, localAxis) *
-        glm::scale    (glm::mat4(1.0f), glm::vec3(gMonsterScale)) *
-        glm::translate(glm::mat4(1.0f), -gMonsterPivotLocal);
-
-    Renderer::setWorldMatrix(shader.getID(), M);
-    Renderer::setViewMatrix(shader.getID(),  camera.getViewMatrix());
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", MONSTER_TEX_SLOT);
 
+    //Draw the stored vertex objects
     glBindVertexArray(stoneVAO);
+    //TODO3 Draw model as elements, instead of as arrays
     glDrawArrays(GL_TRIANGLES, 0, stoneVertices);
     glBindVertexArray(0);
 }
 
+// Render scene from light for shadow mapping before rendering lighting
+// --------------------------------------------------------------------
+void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO)
+{
+    glm::mat4 identity = glm::mat4(1.0f);
+
+    // Ground
+    glm::mat4 groundMatrix = glm::scale(glm::translate(identity, glm::vec3(0.0f, -1.0f, 0.0f)), glm::vec3(60.0f, 0.1f, 60.0f));
+    shadowShader.setMat4("worldMatrix", groundMatrix);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Buildings
+    for (const auto& tower : towers) {
+        glm::mat4 towerMatrix = glm::translate(identity, tower.position);
+        towerMatrix = glm::scale(towerMatrix, glm::vec3(2.0f, tower.height, 2.0f));
+        shadowShader.setMat4("worldMatrix", towerMatrix);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    }
+
+    glBindVertexArray(0);
+}
+
+// Set up model reading all vertices from a model file
+// ---------------------------------------------------
+GLuint setupModelVBO(string path, int& vertexCount) {
+	std::vector<glm::vec3> vertices;
+	std::vector<glm::vec3> normals;
+	std::vector<glm::vec2> UVs;
+	
+	//read the vertex data from the model's OBJ file
+	loadOBJ(path.c_str(), vertices, normals, UVs);
+
+	GLuint VAO;
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO); //Becomes active VAO
+	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
+
+	//Vertex VBO setup
+	GLuint vertices_VBO;
+	glGenBuffers(1, &vertices_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(0);
+
+	//Normals VBO setup
+	GLuint normals_VBO;
+	glGenBuffers(1, &normals_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
+	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(1);
+
+	//UVs VBO setup
+	GLuint uvs_VBO;
+	glGenBuffers(1, &uvs_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
+	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(2);
+
+	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs, as we are using multiple VAOs)
+	vertexCount = vertices.size();
+	return VAO;
+}
+
+// Sets up a model using an Element Buffer Object to refer to vertex data
+// ---------------------------------------------------------------------
+GLuint setupModelEBO(string path, int& vertexCount)
+{
+	vector<int> vertexIndices; //The contiguous sets of three indices of vertices, normals and UVs, used to make a triangle
+	vector<glm::vec3> vertices;
+	vector<glm::vec3> normals;
+	vector<glm::vec2> UVs;
+
+	//read the vertices from the cube.obj file
+	//We won't be needing the normals or UVs for this program
+	loadOBJ2(path.c_str(), vertexIndices, vertices, normals, UVs);
+
+	GLuint VAO;
+	glGenVertexArrays(1, &VAO);
+	glBindVertexArray(VAO); //Becomes active VAO
+	// Bind the Vertex Array Object first, then bind and set vertex buffer(s) and attribute pointer(s).
+
+	//Vertex VBO setup
+	GLuint vertices_VBO;
+	glGenBuffers(1, &vertices_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, vertices_VBO);
+	glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), &vertices.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(0);
+
+	//Normals VBO setup
+	GLuint normals_VBO;
+	glGenBuffers(1, &normals_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, normals_VBO);
+	glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), &normals.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(1);
+
+	//UVs VBO setup
+	GLuint uvs_VBO;
+	glGenBuffers(1, &uvs_VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, uvs_VBO);
+	glBufferData(GL_ARRAY_BUFFER, UVs.size() * sizeof(glm::vec2), &UVs.front(), GL_STATIC_DRAW);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), (GLvoid*)0);
+	glEnableVertexAttribArray(2);
+
+	//EBO setup
+	GLuint EBO;
+	glGenBuffers(1, &EBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, vertexIndices.size() * sizeof(int), &vertexIndices.front(), GL_STATIC_DRAW);
+
+	glBindVertexArray(0); // Unbind VAO (it's always a good thing to unbind any buffer/array to prevent strange bugs), remember: do NOT unbind the EBO, keep it bound to this VAO
+	vertexCount = vertexIndices.size();
+	return VAO;
+}
+
+
+// Process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
+// ---------------------------------------------------------------------------------------------------------
+void processInput(GLFWwindow *window)
+{
+    // Exit the appplication
+    // ---------------------
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window, true); 
+    // Toggle between camera modes
+    // ---------------------------
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+        cameraFirstPerson = true;
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+        cameraFirstPerson = false;
+    // Use camera lookat and side vectors to update positions with ASDW + SHIFT
+    // ------------------------------------------------------------------------
+    camera.processInput(window);
+}
 
 // Initialize the libraries and window
 // -----------------------------------
@@ -772,7 +695,7 @@ bool InitContext() {
         return -1;
     }
     // Tell GLFW to capture mouse movement
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
     glfwMakeContextCurrent(window);
     glViewport(0, 0, SCR_WIDTH, SCR_HEIGHT);
 

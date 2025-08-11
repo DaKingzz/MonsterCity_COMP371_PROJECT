@@ -20,7 +20,7 @@ void main()
     FragPos = vec3(worldPosition);
     Normal = mat3(transpose(inverse(worldMatrix))) * aNormal;
     TexCoord = texCoords;
-
     FragPosLightSpace = lightSpaceMatrix * worldPosition;
+
     gl_Position = projection * view * worldPosition;
 }
