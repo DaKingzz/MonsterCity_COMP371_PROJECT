@@ -1,8 +1,9 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
 #include <GL/glew.h>
 #include <string>
+#include <glm/glm.hpp>
 #include <iostream>
 
 class Renderer {
