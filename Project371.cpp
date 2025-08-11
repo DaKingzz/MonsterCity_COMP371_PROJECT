@@ -300,7 +300,7 @@ int main(){
         // 1) Draw cubes (ground/buildings) with front-face culling to reduce acne
         glEnable(GL_CULL_FACE);
         GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
-        glCullFace(GL_FRONT); // render front faces to reduce self-shadow acne
+        glCullFace(GL_FRONT);
 
         renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
 
