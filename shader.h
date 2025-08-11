@@ -95,7 +95,7 @@ public:
         glDeleteShader(vertex);
         glDeleteShader(fragment);
 
-        std::cout << "SHADER CREATED FROM: " << vertexPath << " and " << fragmentPath << std::endl;
+        std::cout << "SHADER CREATED FROM: " << vertexPath << " and " << fragmentPath << ", ShaderID: " << ID << std::endl;
     }
 
     // Activate/Use Program
