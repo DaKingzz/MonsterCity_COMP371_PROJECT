@@ -1,3 +1,5 @@
+// COMP371 ASSIGNMENT - Monster City
+
 #include <iostream>
 #include <string>
 #include <vector>
