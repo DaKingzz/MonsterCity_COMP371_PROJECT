@@ -21,6 +21,7 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
+#include <glm/gtx/norm.hpp>
 
 using namespace std;
 using namespace glm;
@@ -119,6 +120,61 @@ float lastFrameTime;
 int lastMouseLeftState;
 double lastMousePosX, lastMousePosY;
 
+// Monster state (position, scale, radius)
+// ---------------------------------------
+glm::vec3 gMonsterPos = glm::vec3(0.0f, 0.0f, 0.0f);
+constexpr float gMonsterScale = 0.5f;     // matches your render scale
+constexpr float gMonsterRadiusLocal = 2.0f; // tweak to fit your Stone.obj bounds
+inline float getMonsterRadiusWorld() {
+    return gMonsterRadiusLocal * gMonsterScale;
+}
+
+// Squared distance between XZ points
+// ----------------------------------
+float dist2_xz(const glm::vec3& a, const vec3& b) {
+    vec2 da(a.x, a.z), db(b.x, b.z);
+    vec2 d = da - db;
+    return glm::dot(d, d);
+}
+
+// Segment–sphere intersection (finite beam)
+// -----------------------------------------
+bool segmentHitsSphere(const glm::vec3& A, const glm::vec3& B,
+                              const glm::vec3& C, float R)
+{
+    vec3 AB = B - A;
+    float ab2 = dot(AB, AB);
+    if (ab2 == 0.0f) return glm::length2(C - A) <= R*R;
+    float t = dot(C - A, AB) / ab2;
+    t = clamp(t, 0.0f, 1.0f);
+    vec3 closest = A + t * AB;
+    return length2(C - closest) <= R*R;
+}
+
+// Random spawn away from center and towers
+// ----------------------------------------
+vec3 randomMonsterSpawnNearCamera(const vec3& camPos, float minDist = 8.0f, float maxDist = 22.0f) {
+    for (int tries = 0; tries < 64; ++tries) {
+        float ang = ((float)rand() / RAND_MAX) * 6.2831853f;           // [0, 2π)
+        float rad = minDist + ((float)rand() / RAND_MAX) * (maxDist - minDist);
+        vec3 p = camPos + vec3(std::cos(ang)*rad, 0.0f, std::sin(ang)*rad);
+
+        // keep away from towers a bit
+        bool ok = true;
+        for (const auto& t : towerList) {
+            if (dist2_xz(p, t.position) < (2.5f * 2.5f)) { ok = false; break; }
+        }
+        if (ok) return p;
+    }
+    return camPos + vec3(maxDist, 0.0f, 0.0f); // fallback
+}
+
+// Respawn Monster
+// ---------------
+void respawnMonster() {
+    gMonsterPos = randomMonsterSpawnNearCamera(camera.getPosition());
+}
+
 // Main Function
 // -------------
 int main(){
@@ -196,6 +252,8 @@ int main(){
         float height = 5.0f + static_cast<float>(rand() % 20);
         towerList.push_back({ glm::vec3(x, 0.0f, z), height });
     }
+
+    respawnMonster();
 
     // Set up Models
     // -------------
@@ -334,17 +392,20 @@ int main(){
         vec3 turretTip, turretDir;
         computeTurretBarrelTipAndDir(T(gTurretBasePos), gTurretBaseYawDeg, gTurretBarrelZDeg, turretTip, turretDir);
 
-        // --- Handle left click edge: spawn two projectiles (camera + turret)
+        // Handle left click edge: spawn two projectiles (camera + turret)
+        // ---------------------------------------------------------------
         if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
         {
             const float projectileSpeed = 25.0f;
             // From the flying cube (your existing behavior)
+            /* We dont want this anymore
             {
                 vec3 direction = glm::normalize(camera.getlookAt());
                 vec3 velocity = direction * projectileSpeed;
                 vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
                 projectileList.push_back(Projectile(spawnPosition, velocity, lightingShaderProgram.getID()));
             }
+            */
             // From the turret barrel tip
             {
                 vec3 velocity = turretDir * projectileSpeed;
@@ -439,10 +500,27 @@ void renderProjectiles(Shader& shader, GLuint tex){
     shader.use();
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", LASER_TEX_SLOT);
     // Update and draw projectiles
-    for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
-    {
+    for (auto it = projectileList.begin(); it != projectileList.end(); /* no ++ here */) {
         it->Update(dt);
         it->Draw();
+
+        const glm::vec3& prev = it->prevPosition();
+        const glm::vec3& curr = it->position();
+        const float R = getMonsterRadiusWorld();
+
+        // hit test against monster (segment vs sphere)
+        if (segmentHitsSphere(prev, curr, gMonsterPos, R)) {
+            respawnMonster();                        // move monster
+            it = projectileList.erase(it);           // erase returns next iterator
+            continue;
+        }
+
+        // lifetime cull
+        if (glm::length2(curr) > 800.0f * 800.0f) {
+            it = projectileList.erase(it);
+            continue;
+        }
+        ++it; // only increment when we kept the element
     }
 }
 
@@ -451,46 +529,46 @@ void renderProjectiles(Shader& shader, GLuint tex){
 void renderAvatar(Shader& shader){
         
     spinningCubeAngle += 180.0f * dt;
-        // Draw avatar in view space for first person camera
-        // and in world space for third person camera
-        if (cameraFirstPerson){
-            mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
-                                          rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                          scale(mat4(1.0f), vec3(0.05f));
-            
-            Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
-            Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
-        }
-        else{
-            vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
-            vec3 avatarPosition = camera.getPosition() + avatarOffset;
-
-            mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
-                                           rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
-                                           scale(mat4(1.0f), vec3(0.3f));
-            
-            Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
-        }
-        glDrawArrays(GL_TRIANGLES, 0, 36);
-
-        // Set the view matrix for first and third person cameras
-        // - In first person, camera lookat is set like below
-        // - In third person, camera position is on a sphere looking towards center
-        mat4 viewMatrix(1.0f);
+    // Draw avatar in view space for first person camera
+    // and in world space for third person camera
+    if (cameraFirstPerson){
+        mat4 spinningCubeViewMatrix = translate(mat4(1.0f), vec3(0.0f, 0.0f, -1.5f)) *
+                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                        scale(mat4(1.0f), vec3(0.05f));
         
-        if (cameraFirstPerson){
-            viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
-        }
-        else{
-            // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
-            float radius = 5.0f;
-            vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
-                                                  radius * sinf(camera.getPhi()),
-                                                  -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
-            viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
-        }
-        Renderer::setViewMatrix(shader.getID(), viewMatrix);
+        Renderer::setWorldMatrix(shader.getID(), mat4(1.0f));
+        Renderer::setViewMatrix(shader.getID(), spinningCubeViewMatrix);
     }
+    else{
+        vec3 avatarOffset = normalize(camera.getlookAt()) * 2.0f;
+        vec3 avatarPosition = camera.getPosition() + avatarOffset;
+
+        mat4 spinningCubeWorldMatrix = translate(mat4(1.0f), avatarPosition) *
+                                        rotate(mat4(1.0f), radians(spinningCubeAngle), vec3(0.0f, 1.0f, 0.0f)) *
+                                        scale(mat4(1.0f), vec3(0.3f));
+        
+        Renderer::setWorldMatrix(shader.getID(), spinningCubeWorldMatrix);
+    }
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Set the view matrix for first and third person cameras
+    // - In first person, camera lookat is set like below
+    // - In third person, camera position is on a sphere looking towards center
+    mat4 viewMatrix(1.0f);
+    
+    if (cameraFirstPerson){
+        viewMatrix = lookAt(camera.getPosition(), camera.getPosition() + camera.getlookAt(), camera.getUp());
+    }
+    else{
+        // Position of the camera is on the sphere looking at the point of interest (cameraPosition)
+        float radius = 5.0f;
+        vec3 position = camera.getPosition() - vec3(radius * cosf(camera.getPhi())*cosf(camera.getTheta()),
+                                                radius * sinf(camera.getPhi()),
+                                                -radius * cosf(camera.getPhi())*sinf(camera.getTheta()));
+        viewMatrix = lookAt(position, camera.getPosition(), camera.getUp());
+    }
+    Renderer::setViewMatrix(shader.getID(), viewMatrix);
+}
 
 // Render monster using an OBJ model
 // ---------------------------------
@@ -503,8 +581,8 @@ void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint te
 
     // Move the model within the world
     // -------------------------------
-    mat4 monsterModelMatrix = glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, 0.0f)) *
-                            glm::scale(mat4(1.0f), glm::vec3(1.0f)); // scale down
+    mat4 monsterModelMatrix = translate(mat4(1.0f), gMonsterPos) *
+                            scale(mat4(1.0f), vec3(gMonsterScale)); // scale down
     Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
 
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", MONSTER_TEX_SLOT);
