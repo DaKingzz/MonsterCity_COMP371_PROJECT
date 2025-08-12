@@ -10,7 +10,8 @@ Jared Latchman - 40214398 <br>
 
 **Keyboard + Mouse Control:** <br>
 W A S D + Left Click to shoot <br>
-Q and E to rotate the turret's barrel
+Q and E to rotate the turret's barrel <br>
+Shooting the monsters in its legs will make it die and reappear somewhere else in the city<br>
 
 **Command to run with g++:** <br>
 Just set the compiler to g++ in vs code and run it with the tasks.json file in the project.
