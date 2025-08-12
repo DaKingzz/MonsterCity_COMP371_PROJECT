@@ -128,6 +128,11 @@ constexpr float gMonsterRadiusLocal = 2.0f; // tweak to fit your Stone.obj bound
 inline float getMonsterRadiusWorld() {
     return gMonsterRadiusLocal * gMonsterScale;
 }
+// This is to help monster stay on the ground and not float around
+// ---------------------------------------------------------------
+constexpr float GROUND_Y = -1.0f;
+constexpr float GROUND_THICK = 0.1f;
+inline float groundTopY() { return GROUND_Y + 0.5f * GROUND_THICK; }
 
 // Squared distance between XZ points
 // ----------------------------------
@@ -169,10 +174,12 @@ vec3 randomMonsterSpawnNearCamera(const vec3& camPos, float minDist = 8.0f, floa
     return camPos + vec3(maxDist, 0.0f, 0.0f); // fallback
 }
 
-// Respawn Monster
-// ---------------
+// Respawn Monster and keep him grounded
+// -------------------------------------
 void respawnMonster() {
-    gMonsterPos = randomMonsterSpawnNearCamera(camera.getPosition());
+    vec3 p = randomMonsterSpawnNearCamera(camera.getPosition(), 8.0f, 22.0f);
+    p.y = groundTopY() + getMonsterRadiusWorld();  // center = ground top + radius
+    gMonsterPos = p;
 }
 
 // Main Function
