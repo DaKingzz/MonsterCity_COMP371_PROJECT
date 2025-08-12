@@ -25,6 +25,14 @@
 using namespace std;
 using namespace glm;
 
+// Transform helper functions for Turret
+// -------------------------------------
+static mat4 T(const glm::vec3& p){ return glm::translate(glm::mat4(1.0f), p); }
+static mat4 RX(float deg){ return glm::rotate(glm::mat4(1.0f), glm::radians(deg), glm::vec3(1,0,0)); }
+static mat4 RY(float deg){ return glm::rotate(glm::mat4(1.0f), glm::radians(deg), glm::vec3(0,1,0)); }
+static mat4 S(const glm::vec3& s){ return glm::scale(glm::mat4(1.0f), s); }
+
+
 struct Tower {
     vec3 position;
     float height;
@@ -34,12 +42,13 @@ struct Tower {
 // -------------
 constexpr int GRASS_TEX_SLOT = 0;
 constexpr int BUILDING_TEX_SLOT = 1;
-constexpr int LAMP_TEX_SLOT = 2;
-constexpr int LASER_TEX_SLOT = 3;
-constexpr int MONSTER_TEX_SLOT = 4;
-constexpr int JACK_O_LANTERN_TEX_SLOT = 5;
-constexpr int MESH_TEX_SLOT = 6;
-constexpr int GLOWSTONE_TEX_SLOT = 7;
+constexpr int METAL_TEX_SLOT = 2;
+constexpr int LAMP_TEX_SLOT = 3;
+constexpr int LASER_TEX_SLOT = 4;
+constexpr int MONSTER_TEX_SLOT = 5;
+constexpr int JACK_O_LANTERN_TEX_SLOT = 6;
+constexpr int MESH_TEX_SLOT = 7;
+constexpr int GLOWSTONE_TEX_SLOT = 8;
 int CURRENT_CUBE_TEX_SLOT;
 
 //Texture ID declaration
@@ -69,6 +78,13 @@ Shader* lightCubeShader;
 vector<Tower> towerList;
 list<Projectile> projectileList;
 
+// Turret state varaibles
+// ----------------------
+float gTurretBaseYawDeg = 0.0f;        // updated every frame
+float gTurretBarrelZDeg = 0.0f;        // controlled by Q/E, clamped to [-45, +45]
+GLuint gMetalTexID = 0;                // set after loading textures
+vec3 gTurretBasePos = glm::vec3(0.0f, 0.0f, 5.0f); // Right in front of the monster
+
 // Methods to call and define later
 // --------------------------------
 void processInput(GLFWwindow *window);
@@ -80,6 +96,9 @@ void renderAvatar(Shader& shader);
 void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint tex, vec3 lightPos1, vec3 lightPos2);
 void renderSceneFromLight(Shader& shadowShader, const std::vector<Tower>& towers, GLuint cubeVAO);
 void renderMonsterFromLight(Shader& shadowShader, GLuint monsterVAO, int monsterVertexCount);
+void renderTurret(Shader& shader, GLuint cubeVAO, const glm::mat4& parentWorld, float baseYawDeg, float barrelZDeg, GLuint metalTexID);
+void renderTurretShadow(Shader& shadowShader, GLuint cubeVAO, const glm::mat4& parentWorld, float baseYawDeg, float barrelZDeg);
+static void computeTurretBarrelTipAndDir(const mat4& parentWorld, float baseYawDeg, float barrelZDeg, vec3& outTip, vec3& outDir);
 GLuint setupModelVBO(string path, int& vertexCount);
 GLuint setupModelEBO(string path, int& vertexCount);
 
@@ -118,6 +137,7 @@ int main(){
     // ------------------------
     GLuint grassTextureID = Texture::load("Textures/grass.jpg");
     GLuint buildingTextureID = Texture::load("Textures/building.jpg");
+    GLuint metalTextureID = Texture::load("Textures/metal.jpg");
     GLuint lampTextureID = Texture::load("Textures/lamp.png");
     GLuint laserTextureID = Texture::load("Textures/laser.png");
     GLuint monsterTextureID = Texture::load("Textures/sand.jpg");
@@ -125,10 +145,11 @@ int main(){
     GLuint meshTextureID = Texture::load("Textures/mesh.png");
     GLuint glowstoneTextureID = Texture::load("Textures/Glowstone.jpg");
 
-    //Sets lamp as default lamp texture
+    //Sets default textures
     //---------------------------------
     CURRENT_CUBE_TEX_SLOT = LAMP_TEX_SLOT;    
-    flyingCubeTextureID = lampTextureID ; 
+    flyingCubeTextureID = lampTextureID;
+    gMetalTexID = metalTextureID; 
     
     // Create Framebuffer for shawfow mapping
     // --------------------------------------
@@ -199,7 +220,7 @@ int main(){
     // Frame time calculations for mouse (Comes with Frame Parameters at the top of this file)
     // ---------------------------------------------------------------------------------------
     lastFrameTime = glfwGetTime();
-    int lastMouseLeftState = GLFW_RELEASE;
+    lastMouseLeftState = GLFW_RELEASE;
     glfwGetCursorPos(window, &lastMousePosX, &lastMousePosY);
 
     // Light cube parameters
@@ -210,6 +231,14 @@ int main(){
         return vec3(cos(time + timeOffset) * radius, 0.0f, sin(time + timeOffset) * radius) + center;
     };
 
+    // Initialize some turret variables
+    vec3 f = normalize(camera.getlookAt());
+    gTurretBaseYawDeg = degrees(atan2(f.x, f.z));
+    // Pitch in degrees: asin(y / length)
+    gTurretBarrelZDeg = degrees(asin(clamp(f.y, -1.0f, 1.0f)));
+    // Clamp rotation limits right away
+    gTurretBarrelZDeg = clamp(gTurretBarrelZDeg, -75.0f, 75.0f);
+
     // Render Loop
     // -----------
     while(!glfwWindowShouldClose(window)){
@@ -218,7 +247,12 @@ int main(){
         dt = glfwGetTime() - lastFrameTime;
         lastFrameTime += dt;
 
+        // Process Input
+        // -------------
+        processInput(window);
+
         // Light Cube Variables
+        // --------------------
         float time = glfwGetTime();
         vec3 center = vec3(0.0f, 5.0f, 0.0f);
         float radius = 10.0f;
@@ -233,6 +267,7 @@ int main(){
         glm::mat4 lightSpaceMatrix = lightProjection * lightView;
 
         // Render to depth map
+        // -------------------
         shadowShaderProgram.use();
         shadowShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 
@@ -240,15 +275,23 @@ int main(){
         glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBO);
         glClear(GL_DEPTH_BUFFER_BIT);
 
-        // 1) Draw cubes (ground/buildings) with front-face culling to reduce acne
+        // Draw cubes (ground/buildings) with front-face culling to reduce acne
         glEnable(GL_CULL_FACE);
         GLint prevCull; glGetIntegerv(GL_CULL_FACE_MODE, &prevCull);
         glCullFace(GL_FRONT);
 
         renderSceneFromLight(shadowShaderProgram, towerList, lightCubeVAO);
 
+        // Turret into the shadow map
+        // --------------------------
+        glm::mat4 turretParentWorld = T(gTurretBasePos);
+        // Aim at the camera
+        f = normalize(camera.getlookAt());
+        gTurretBaseYawDeg = degrees(std::atan2(f.x, f.z));
+        renderTurretShadow(shadowShaderProgram, lightCubeVAO, turretParentWorld, gTurretBaseYawDeg, gTurretBarrelZDeg);
+
         // Draw the monster into the depth map too.
-        // Disable culling for safety (OBJ winding can be inconsistent).
+        // Disable culling for safety
         glDisable(GL_CULL_FACE);
         renderMonsterFromLight(shadowShaderProgram, stoneVAO, stoneVertices);
 
@@ -257,10 +300,6 @@ int main(){
         glCullFace(prevCull);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-        // Process Input
-        // -------------
-        processInput(window);
         
         // Light Pass + Renderer Clear
         // ---------------------------
@@ -278,14 +317,43 @@ int main(){
         lightingShaderProgram.setVec3("viewPos", camera.getPosition());
         lightingShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
         
-        glActiveTexture(GL_TEXTURE8); // set to free unit
+        glActiveTexture(GL_TEXTURE14); // set to free unit
         glBindTexture(GL_TEXTURE_2D, depthMap);
-        lightingShaderProgram.setInt("shadowMap", 8);
+        lightingShaderProgram.setInt("shadowMap", 14);
 
         
         // Render the scene
         // ----------------
         renderScene(lightingShaderProgram, towerList, lightCubeVAO, grassTextureID, buildingTextureID);
+        // Render the turret
+        turretParentWorld = T(gTurretBasePos);
+        f = normalize(camera.getlookAt());
+        gTurretBaseYawDeg = degrees(std::atan2(f.x, f.z));
+        renderTurret(lightingShaderProgram, lightCubeVAO, turretParentWorld, gTurretBaseYawDeg, gTurretBarrelZDeg, gMetalTexID);
+        // Compute turret tip & dir
+        vec3 turretTip, turretDir;
+        computeTurretBarrelTipAndDir(T(gTurretBasePos), gTurretBaseYawDeg, gTurretBarrelZDeg, turretTip, turretDir);
+
+        // --- Handle left click edge: spawn two projectiles (camera + turret)
+        if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+        {
+            const float projectileSpeed = 25.0f;
+            // From the flying cube (your existing behavior)
+            {
+                vec3 direction = glm::normalize(camera.getlookAt());
+                vec3 velocity = direction * projectileSpeed;
+                vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
+                projectileList.push_back(Projectile(spawnPosition, velocity, lightingShaderProgram.getID()));
+            }
+            // From the turret barrel tip
+            {
+                vec3 velocity = turretDir * projectileSpeed;
+                vec3 spawnPosition = turretTip + turretDir * 0.2f; // nudge forward to avoid self-collision
+                projectileList.push_back(Projectile(spawnPosition, velocity, lightingShaderProgram.getID()));
+            }
+        }
+        lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
+
         // Render the light cubes
         // ----------------------
         renderLightCubes(*lightCubeShader, lightCubeVAO, lightPos1, lightPos2, flyingCubeTextureID);
@@ -299,7 +367,7 @@ int main(){
         // --------------------------------
         Renderer::setViewMatrix(monsterShaderProgram.getID(), camera.getViewMatrix());
         monsterShaderProgram.setMat4("lightSpaceMatrix", lightSpaceMatrix);
-        monsterShaderProgram.setInt("shadowMap", 8);
+        monsterShaderProgram.setInt("shadowMap", 14);
         renderMonster(monsterShaderProgram, stoneVAO, stoneVertices, monsterTextureID, lightPos1, lightPos2);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -376,18 +444,6 @@ void renderProjectiles(Shader& shader, GLuint tex){
         it->Update(dt);
         it->Draw();
     }
-
-    // Shoot projectiles on mouse left click
-    if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        const float projectileSpeed = 25.0f;
-        vec3 direction = normalize(camera.getlookAt());
-        vec3 velocity = direction * projectileSpeed;
-        vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
-        
-        projectileList.push_back(Projectile(spawnPosition,velocity ,  shader.getID()));
-    }
-    lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 }
 
 // Draw avatar in 1st or 3rd person
@@ -495,6 +551,67 @@ void renderMonsterFromLight(Shader& shadowShader, GLuint monsterVAO, int monster
     glBindVertexArray(0);
 }
 
+// Hierarchical turret, Base -> Barrel
+// -----------------------------------
+void renderTurret(Shader& shader, GLuint cubeVAO, const glm::mat4& parentWorld, float baseYawDeg, float barrelZDeg, GLuint metalTexID){
+    shader.use();
+    Renderer::bindTexture(shader.getID(), metalTexID, "textureSampler", METAL_TEX_SLOT);
+
+    // Base:
+    glm::mat4 baseWorld = parentWorld *
+        RY(baseYawDeg) *
+        S(glm::vec3(2.0f, 0.3f, 2.0f));
+
+    Renderer::setWorldMatrix(shader.getID(), baseWorld);
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Mount: sits on top of base
+    glm::mat4 mountWorld = baseWorld *
+        T(glm::vec3(0.0f, 0.45f, 0.0f)) *
+        S(glm::vec3(1.2f, 0.2f, 1.2f));
+
+    Renderer::setWorldMatrix(shader.getID(), mountWorld);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    // Barrel:
+    glm::mat4 barrelWorld = baseWorld *
+        T(vec3(0.0f, 0.65f, 0.0f)) *                                   // pivot height
+        rotate(mat4(1.0f), radians(barrelZDeg), vec3(1,0,0)) *         // Decide rotating direction
+        T(vec3(0.0f, 1.0f, 0.0f)) *                                    // move to center after scaling
+        S(vec3(0.25f, 2.0f, 0.25f));                                   // long Y box
+
+    Renderer::setWorldMatrix(shader.getID(), barrelWorld);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+}
+
+// Render turret shadow before lighting
+// ------------------------------------
+void renderTurretShadow(Shader& shadowShader, GLuint cubeVAO, const glm::mat4& parentWorld, float baseYawDeg, float barrelZDeg){
+    auto draw = [&](const glm::mat4& w){
+        shadowShader.setMat4("worldMatrix", w);
+        glBindVertexArray(cubeVAO);
+        glDrawArrays(GL_TRIANGLES, 0, 36);
+    };
+
+    glm::mat4 baseWorld = parentWorld *
+        RY(baseYawDeg) *
+        S(glm::vec3(2.0f, 0.3f, 2.0f));
+    draw(baseWorld);
+
+    glm::mat4 mountWorld = baseWorld *
+        T(glm::vec3(0.0f, 0.45f, 0.0f)) *
+        S(glm::vec3(1.2f, 0.2f, 1.2f));
+    draw(mountWorld);
+
+    glm::mat4 barrelWorld = baseWorld *
+        T(glm::vec3(0.0f, 0.65f, 0.0f)) *
+        glm::rotate(glm::mat4(1.0f), glm::radians(barrelZDeg), glm::vec3(1,0,0)) *
+        T(glm::vec3(0.0f, 1.0f, 0.0f)) *
+        S(glm::vec3(0.25f, 2.0f, 0.25f));
+    draw(barrelWorld);
+}
+
 // Set up model reading all vertices from a model file
 // ---------------------------------------------------
 GLuint setupModelVBO(string path, int& vertexCount) {
@@ -592,6 +709,21 @@ GLuint setupModelEBO(string path, int& vertexCount)
 	return VAO;
 }
 
+// Compute Direction to shoot at for the turret
+// --------------------------------------------
+static void computeTurretBarrelTipAndDir(const mat4& parentWorld, float baseYawDeg, float barrelZDeg, vec3& outTip, vec3& outDir){
+    mat4 baseWorld = parentWorld * RY(baseYawDeg) * S(vec3(2.0f, 0.3f, 2.0f));
+    mat4 barrelWorld = baseWorld *
+        T(vec3(0.0f, 0.65f, 0.0f)) *
+        rotate(mat4(1.0f), radians(barrelZDeg), vec3(1,0,0))*
+        T(vec3(0.0f, 1.0f, 0.0f)) *
+        S(vec3(0.25f, 2.0f, 0.25f));
+
+    // Tip at local (0, +1, 0) after unit-cube → scaled to 2.0 along Y
+    outTip = vec3(barrelWorld * glm::vec4(0, 1.0f, 0, 1));
+    // Direction is local +Y transformed
+    outDir = normalize(mat3(barrelWorld) * vec3(0, 1, 0));
+}
 
 // Process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
@@ -607,6 +739,16 @@ void processInput(GLFWwindow *window)
         cameraFirstPerson = true;
     if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
         cameraFirstPerson = false;
+
+    // Turret barrel Z rotation with Q / E  (±75°)
+    const float barrelSpeed = 180.0f; // deg/sec
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+        gTurretBarrelZDeg += barrelSpeed * dt;
+    }
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+        gTurretBarrelZDeg -= barrelSpeed * dt;
+    }
+    gTurretBarrelZDeg = glm::clamp(gTurretBarrelZDeg, -75.0f, 75.0f);
 
     //Random color chang of cubes
     //---------------------------------------
