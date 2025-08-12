@@ -807,7 +807,7 @@ bool InitContext() {
 
     // Create Window and rendering context using GLFW, resolution is 800x600
     // ------------------------------------------------------------------
-    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Comp 371 - Project 371 - Assignment", NULL, NULL);
+    window = glfwCreateWindow(SCR_WIDTH, SCR_HEIGHT, "Comp 371 - Project 371 Assignment - Monster City", NULL, NULL);
     if (window == NULL)
     {
         std::cerr << "Failed to create GLFW window" << std::endl;
