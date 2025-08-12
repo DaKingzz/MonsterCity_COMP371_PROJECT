@@ -22,4 +22,5 @@ Shader: load and compile shaders + pass uniforms to shaders <br>
 Renderer: set transformations matrices + bind textures <br>
 Camera: Handle camera movement calculations and inputs <br>
 Texture: Loads textures from an image <br>
-Projectile: Handles the class projectile + update + draw and everything related to it <br>
+Projectile: Handles the class projectile + update + draw <br>
+Objectloaders: Upload and set up OBJ models into the project.
