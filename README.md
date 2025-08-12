@@ -9,10 +9,11 @@ Arturo Sanchez E - 40283236 <br>
 Jared Latchman - 40214398 <br>
 
 **Keyboard + Mouse Control:** <br>
-W A S D + Left Click to shoot
+W A S D + Left Click to shoot <br>
+Q and E to rotate the turret's barrel
 
 **Command to run with g++:** <br>
-Just set the compiler to g++ in vs code and run it.
+Just set the compiler to g++ in vs code and run it with the tasks.json file in the project.
 
 **File Structure** <br>
 Project371: Main File where everything happens <br>
