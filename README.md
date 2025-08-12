@@ -1,7 +1,7 @@
-# Final Project for COMP371 - Computer Graphics
+# Final Project for COMP371 - Computer Graphics - Monster City
 
-__**Game**__ <br>
-Shoot the monsters and save the town from danger!
+__**Game: Monster City**__ <br>
+Welcome to Monster City! The city is overrun with monsters, the military has asked for your help in the fight. Shoot down those beasts and save the city from danger!
 
 **Team Members:** <br>
 Pai Peng - 40155601 <br>
