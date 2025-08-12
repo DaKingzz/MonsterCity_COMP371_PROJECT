@@ -21,6 +21,7 @@
 #include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
 #include <glm/gtc/matrix_transform.hpp> // include this to create transformation matrices
 #include <glm/common.hpp>
+#include <glm/gtx/norm.hpp>
 
 using namespace std;
 using namespace glm;
@@ -81,6 +82,56 @@ float dt;
 float lastFrameTime;
 int lastMouseLeftState;
 double lastMousePosX, lastMousePosY;
+
+// --- Monster state (position, scale, radius) ---
+glm::vec3 gMonsterPos = glm::vec3(0.0f, 0.0f, 0.0f);
+constexpr float gMonsterScale = 0.5f;     // matches your render scale
+constexpr float gMonsterRadiusLocal = 2.0f; // tweak to fit your Stone.obj bounds
+inline float getMonsterRadiusWorld() {
+    return gMonsterRadiusLocal * gMonsterScale;
+}
+
+// --- Utility: squared distance between XZ points ---
+inline float dist2_xz(const glm::vec3& a, const glm::vec3& b) {
+    glm::vec2 da(a.x, a.z), db(b.x, b.z);
+    glm::vec2 d = da - db;
+    return glm::dot(d, d);
+}
+
+// --- Segment–sphere intersection (finite beam) ---
+inline bool segmentHitsSphere(const glm::vec3& A, const glm::vec3& B,
+                              const glm::vec3& C, float R)
+{
+    glm::vec3 AB = B - A;
+    float ab2 = glm::dot(AB, AB);
+    if (ab2 == 0.0f) return glm::length2(C - A) <= R*R;
+    float t = glm::dot(C - A, AB) / ab2;
+    t = glm::clamp(t, 0.0f, 1.0f);
+    glm::vec3 closest = A + t * AB;
+    return glm::length2(C - closest) <= R*R;
+}
+
+// --- Random spawn away from center and towers ---
+glm::vec3 randomMonsterSpawn(float maxRange = 40.0f, float minCenterDist = 5.0f) {
+    for (int tries = 0; tries < 64; ++tries) {
+        float x = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
+        float z = ((rand() / (float)RAND_MAX) * 2.0f - 1.0f) * maxRange;
+        glm::vec3 p(x, 0.0f, z);
+
+        // keep away from towers a bit
+        bool ok = true;
+        for (const auto& t : towerList) {
+            if (dist2_xz(p, t.position) < (2.5f * 2.5f)) { ok = false; break; }
+        }
+        if (ok) return p;
+    }
+    // fallback
+    return glm::vec3(0.0f);
+}
+
+inline void respawnMonster() {
+    gMonsterPos = randomMonsterSpawn();
+}
 
 // Main Function
 // -------------
@@ -152,6 +203,8 @@ int main(){
         float height = 5.0f + static_cast<float>(rand() % 20);
         towerList.push_back({ glm::vec3(x, 0.0f, z), height });
     }
+
+    respawnMonster();
 
     // Set up Models
     // -------------
@@ -344,21 +397,38 @@ void renderProjectiles(Shader& shader, GLuint tex){
     shader.use();
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", LASER_TEX_SLOT);
     // Update and draw projectiles
-    for (list<Projectile>::iterator it = projectileList.begin(); it != projectileList.end(); ++it)
-    {
-        it->Update(dt);
-        it->Draw();
-    }
+    const float R = getMonsterRadiusWorld();
 
-    // Shoot projectiles on mouse left click
+    for (auto it = projectileList.begin(); it != projectileList.end(); /*++ in body*/) {
+        it->Update(dt);  // this sets mPrevPosition internally
+    
+        const glm::vec3& prev = it->prevPosition();
+        const glm::vec3& curr = it->position();
+    
+        it->Draw();
+    
+        const float R = getMonsterRadiusWorld();
+        if (segmentHitsSphere(prev, curr, gMonsterPos, R)) {
+            respawnMonster();
+            it = projectileList.erase(it);
+            continue;
+        }
+    
+        if (glm::length2(curr) > 800.0f * 800.0f) {
+            it = projectileList.erase(it);
+            continue;
+        }
+        ++it;
+    }
+    // Fire on click
     if (lastMouseLeftState == GLFW_RELEASE && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
         const float projectileSpeed = 25.0f;
-        vec3 direction = normalize(camera.getlookAt());
-        vec3 velocity = direction * projectileSpeed;
-        vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
-        
-        projectileList.push_back(Projectile(spawnPosition,velocity ,  shader.getID()));
+        glm::vec3 direction = glm::normalize(camera.getlookAt());
+        glm::vec3 velocity = direction * projectileSpeed;
+        glm::vec3 spawnPosition = camera.getPosition() + direction * 2.0f;
+
+        projectileList.push_back(Projectile(spawnPosition, velocity, shader.getID()));
     }
     lastMouseLeftState = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
 }
@@ -418,12 +488,12 @@ void renderMonster(Shader& shader, GLuint stoneVAO, int stoneVertices, GLuint te
     shader.setVec3("lightPos2", lightPos2);
     shader.setVec3("viewPos", camera.getPosition());
 
-    // Move the model within the world
-    // -------------------------------
-    mat4 monsterModelMatrix = glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, 0.0f)) *
-                            glm::scale(mat4(1.0f), glm::vec3(1.0f)); // scale down
-    Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
+    // Position + scale the model
+    glm::mat4 monsterModelMatrix =
+    glm::translate(glm::mat4(1.0f), gMonsterPos) *
+    glm::scale(glm::mat4(1.0f), glm::vec3(gMonsterScale));
 
+    Renderer::setWorldMatrix(shader.getID(), monsterModelMatrix);
     Renderer::bindTexture(shader.getID(), tex, "textureSampler", MONSTER_TEX_SLOT);
 
     //Draw the stored vertex objects
